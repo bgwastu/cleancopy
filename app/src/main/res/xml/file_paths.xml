@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <cache-path name="fixtures" path="fixtures/" />
+    <cache-path name="sanitized" path="sanitized/" />
+    <cache-path name="clipboard" path="clipboard/" />
+    <cache-path name="clipboard_auto" path="clipboard-auto/" />
+    <cache-path name="shared" path="shared/" />
+</paths>

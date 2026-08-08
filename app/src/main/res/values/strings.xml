@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">ByeByeMeta</string>
+    <string name="tile_clean_copy">Clean &amp; Copy</string>
+    <string name="tile_clean_current">Clean Current Clipboard</string>
+</resources>

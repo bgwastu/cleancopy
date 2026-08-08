@@ -1,0 +1,9 @@
+<resources>
+    <style name="Theme.ByeByeMeta" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:windowSplashScreenBackground">@color/bye_bye_meta_icon_background</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_bye_bye_meta_splash</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:forceDarkAllowed">false</item>
+    </style>
+</resources>
