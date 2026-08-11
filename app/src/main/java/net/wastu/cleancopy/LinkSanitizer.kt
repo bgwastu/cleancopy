@@ -280,7 +280,10 @@ object NetworkRedirectResolver {
             connection.readTimeout = 15_000
             connection.instanceFollowRedirects = false
             connection.requestMethod = if (isFacebookShare) "GET" else "HEAD"
-            connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36")
+            connection.setRequestProperty(
+                "User-Agent",
+                if (isFacebookShare) FACEBOOK_USER_AGENT else DEFAULT_USER_AGENT
+            )
             var code = runCatching { connection.responseCode }.getOrElse {
                 return LinkCleanResult(url, current, emptyList(), hops, it.message)
             }
@@ -347,6 +350,9 @@ object NetworkRedirectResolver {
             ?.get(1)
             ?.let { "https://www.facebook.com/reel/$it" }
     }.getOrNull()
+
+    private const val DEFAULT_USER_AGENT = "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36"
+    private const val FACEBOOK_USER_AGENT = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1"
 
     private val shortenerHosts = setOf(
         "t.co",
