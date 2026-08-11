@@ -11,6 +11,7 @@ class CleanCopyTilePreferencesActivity : ComponentActivity() {
         startActivity(
             Intent(this, CleanMediaActivity::class.java)
                 .putExtra(CleanMediaActivity.EXTRA_SAVE_TO_LIBRARY, false)
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
         )
         finish()
     }

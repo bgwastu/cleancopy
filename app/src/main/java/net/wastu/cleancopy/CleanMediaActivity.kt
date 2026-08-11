@@ -127,14 +127,22 @@ class CleanMediaActivity : ComponentActivity() {
             .map { clip.description.getMimeType(it) }
             .firstOrNull { it.startsWith("image/") || it.startsWith("video/") }
         return buildList {
-            repeat(clip.itemCount) { index ->
-                val item = clip.getItemAt(index)
-                val uri = item.uri ?: item.text?.toString()?.let { text ->
-                    runCatching { Uri.parse(text) }.getOrNull()
+            fun addClipData(data: ClipData?) {
+                if (data == null) return
+                repeat(data.itemCount) { index ->
+                    val item = data.getItemAt(index)
+                    item.uri?.let(::add)
+                    item.text?.toString()?.let { text ->
+                        runCatching { Uri.parse(text) }.getOrNull()?.let(::add)
+                    }
+                    item.intent?.data?.let(::add)
+                    @Suppress("DEPRECATION")
+                    item.intent?.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)?.let(::add)
+                    addClipData(item.intent?.clipData)
                 }
-                if (uri?.scheme == "content" || uri?.scheme == "file") add(uri)
             }
-        }
+            addClipData(clip)
+        }.filter { it.scheme in setOf("content", "file") }.distinct()
     }
 
     private fun preparedInputUris(): List<Uri>? = intent.getStringArrayListExtra(EXTRA_INPUT_URIS)

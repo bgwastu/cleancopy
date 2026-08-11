@@ -1,10 +1,47 @@
 # CleanCopy
 
-CleanCopy makes private copies of media and links before you share them.
+CleanCopy makes clean copies of images, videos, and links before you share them.
 
-- Remove identifying metadata from images and videos.
-- Clean tracking parameters and redirect wrappers from copied links.
-- Refresh the ClearURLs rules catalog automatically when the app opens.
-- Keep an optional local history of cleaned media and links.
+![CleanCopy home screen](docs/screenshots/home.png)
 
-Link cleaning is enabled from Settings and runs when you choose **Clean current clipboard**. Media cleaning remains available from the app and Quick Settings tiles.
+## What it does
+
+- Removes identifying metadata from images and videos.
+- Cleans tracking parameters and redirect wrappers from links.
+- Copies cleaned media back to the clipboard, or saves it to a folder.
+- Adds optional Quick Settings tiles for fast access.
+- Keeps an optional local history of cleaned items.
+
+## Install
+
+Download the latest APK from [GitHub Releases](https://github.com/bgwastu/cleancopy/releases).
+
+For automatic updates, install [Obtainium](https://github.com/ImranR98/Obtainium), tap **Add app**, and paste this repository URL:
+
+```text
+https://github.com/bgwastu/cleancopy
+```
+
+Obtainium watches the GitHub Releases page and can notify you when a new APK is available. CleanCopy does not currently have an app-store listing, so this is the simplest update path.
+
+## Use it
+
+1. Open CleanCopy and choose **Choose media & copy**, or add the Quick Settings tile.
+2. Select one or more images or videos.
+3. CleanCopy removes supported metadata and copies the result.
+
+Use **Clean current clipboard** when the media is already in your clipboard. Link cleaning is enabled from Settings.
+
+![CleanCopy settings](docs/screenshots/settings.png)
+
+![CleanCopy history detail](docs/screenshots/history-detail.png)
+
+## Build
+
+```text
+./gradlew lintDebug testDebugUnitTest assembleDebug
+```
+
+## License
+
+[MIT](LICENSE) © Bagas Wastu

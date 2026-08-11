@@ -68,6 +68,7 @@
             android:exported="true"
             android:icon="@drawable/ic_choose_media_copy"
             android:label="@string/tile_clean_copy"
+            android:settingsActivity="net.wastu.cleancopy.CleanCopyTilePreferencesActivity"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
             <intent-filter>
                 <action android:name="android.service.quicksettings.action.QS_TILE" />
@@ -90,6 +91,7 @@
             android:exported="true"
             android:icon="@drawable/ic_clean_copy_mark"
             android:label="@string/tile_cleancopy"
+            android:settingsActivity="net.wastu.cleancopy.CleanCopyTilePreferencesActivity"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
             <intent-filter>
                 <action android:name="android.service.quicksettings.action.QS_TILE" />

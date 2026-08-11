@@ -28,6 +28,7 @@ import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.ContentPaste
 import androidx.compose.material.icons.outlined.ContentPasteSearch
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Movie
@@ -149,8 +150,8 @@ fun CleanCopyApp(
                     NavigationBarItem(
                         selected = selectedTab == 0,
                         onClick = { onTabSelected(0) },
-                        icon = { Icon(Icons.Outlined.ContentPaste, "Clipboard") },
-                        label = { Text("Clipboard") }
+                         icon = { Icon(Icons.Outlined.Home, "Home") },
+                         label = { Text("Home") }
                     )
                     NavigationBarItem(
                         selected = selectedTab == 1,
@@ -233,7 +234,6 @@ private fun ClipboardPage(
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.height(42.dp).width(42.dp)
                 )
-                Text("Create a private media copy", style = MaterialTheme.typography.titleLarge)
                 Text(
                     "Remove location and other identifying metadata before you paste or save it.",
                     style = MaterialTheme.typography.bodyMedium,
@@ -526,7 +526,7 @@ private fun historyStatus(entry: ClipboardHistoryEntry): String {
             afterField.label == beforeField.label && afterField.value == beforeField.value
         }
     }
-    return if (removedCount == 0) "No tracked fields removed" else "$removedCount field(s) removed"
+    return if (removedCount == 0) "Cleaned" else "$removedCount field(s) removed"
 }
 
 @Composable
@@ -580,7 +580,7 @@ private fun SettingsPage(
         SettingSwitch(
             icon = Icons.Outlined.History,
             title = "Save cleaning history",
-            supporting = "Keep cleaned media and old metadata available in the Clipboard tab",
+            supporting = "Keep cleaned media and old metadata available in the Home tab",
             checked = historyEnabled,
             onCheckedChange = onHistoryEnabledChanged
         )
