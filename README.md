@@ -2,7 +2,27 @@
 
 CleanCopy makes clean copies of images, videos, and links before you share them.
 
-![CleanCopy home screen](docs/screenshots/home.png)
+## Screenshots
+
+<table>
+  <tr>
+    <td align="center">
+      <img src="docs/screenshots/home.png" width="220" alt="CleanCopy home screen">
+      <br>
+      <sub>Home</sub>
+    </td>
+    <td align="center">
+      <img src="docs/screenshots/settings.png" width="220" alt="CleanCopy settings screen">
+      <br>
+      <sub>Settings</sub>
+    </td>
+    <td align="center">
+      <img src="docs/screenshots/history-detail.png" width="220" alt="CleanCopy history detail screen">
+      <br>
+      <sub>History detail</sub>
+    </td>
+  </tr>
+</table>
 
 ## What it does
 
@@ -31,10 +51,6 @@ Obtainium watches the GitHub Releases page and can notify you when a new APK is 
 3. CleanCopy removes supported metadata and copies the result.
 
 Use **Clean current clipboard** when the media is already in your clipboard. Link cleaning is enabled from Settings.
-
-![CleanCopy settings](docs/screenshots/settings.png)
-
-![CleanCopy history detail](docs/screenshots/history-detail.png)
 
 ## Build
 
