@@ -54,6 +54,10 @@
             android:theme="@style/Theme.CleanCopy.Transparent"
             android:exported="false" />
 
+        <service
+            android:name=".ClipboardLinkService"
+            android:exported="false" />
+
         <activity
             android:name=".CleanCopyTilePreferencesActivity"
             android:exported="true">

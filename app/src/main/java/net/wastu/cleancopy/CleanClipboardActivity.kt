@@ -52,7 +52,7 @@ class CleanClipboardActivity : ComponentActivity() {
                     )
                 }
                 clipboard.setPrimaryClip(ClipData.newPlainText("CleanCopy clean links", result.text))
-                recordLinks(result)
+                recordCleanedLinks(this@CleanClipboardActivity, result)
                 val count = result.links.count { it.changed }
                 finishWithToast(
                     if (count == 0) "No tracking found in copied links" else "$count link(s) cleaned and copied"
@@ -151,22 +151,6 @@ class CleanClipboardActivity : ComponentActivity() {
         else -> null
     }
 
-    private fun recordLinks(result: LinkBatchResult) {
-        if (result.links.none { it.changed }) return
-        ClipboardHistoryStore.record(
-            this,
-            ClipboardHistoryEntry(
-                id = System.currentTimeMillis(),
-                clipboardUri = result.text,
-                sourceName = "Cleaned links",
-                kind = MediaKind.LINK,
-                capturedAt = System.currentTimeMillis(),
-                before = result.links.map { MetadataField("Original link", it.original) },
-                after = result.links.map { MetadataField("Clean link", it.cleaned) }
-            )
-        )
-    }
-
     private fun finishWithToast(message: String, duration: Int = Toast.LENGTH_SHORT) {
         Toast.makeText(this, message, duration).show()
         finish()
@@ -176,4 +160,20 @@ class CleanClipboardActivity : ComponentActivity() {
         const val CLIPBOARD_READ_RETRIES = 5
         const val CLIPBOARD_RETRY_DELAY_MS = 100L
     }
+}
+
+fun recordCleanedLinks(context: Context, result: LinkBatchResult) {
+    if (result.links.none { it.changed }) return
+    ClipboardHistoryStore.record(
+        context,
+        ClipboardHistoryEntry(
+            id = System.currentTimeMillis(),
+            clipboardUri = result.text,
+            sourceName = "Cleaned links",
+            kind = MediaKind.LINK,
+            capturedAt = System.currentTimeMillis(),
+            before = result.links.map { MetadataField("Original link", it.original) },
+            after = result.links.map { MetadataField("Clean link", it.cleaned) }
+        )
+    )
 }
