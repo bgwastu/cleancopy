@@ -1,4 +1,4 @@
-package com.byebyemeta
+package com.cleancopy
 
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -56,7 +56,7 @@ class ShareReceiverActivity : ComponentActivity() {
                 val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 val clip = ClipData.newUri(
                     contentResolver,
-                    "ByeByeMeta clean media",
+                    "CleanCopy clean media",
                     prepared.first().uri
                 )
                 prepared.drop(1).forEach { clip.addItem(ClipData.Item(it.uri)) }

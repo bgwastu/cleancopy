@@ -1,4 +1,4 @@
-package com.byebyemeta
+package com.cleancopy
 
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -45,8 +45,8 @@ class MainActivity : ComponentActivity() {
                 history = ClipboardHistoryStore.entries(this@MainActivity)
             }
 
-            ByeByeMetaTheme {
-                ByeByeMetaApp(
+            CleanCopyTheme {
+                CleanCopyApp(
                     selectedTab = selectedTab,
                     history = history,
                     historyEnabled = historyEnabled,

@@ -1,4 +1,4 @@
-package com.byebyemeta
+package com.cleancopy
 
 import android.content.Context
 import org.json.JSONArray

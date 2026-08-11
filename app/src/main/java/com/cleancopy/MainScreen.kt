@@ -1,4 +1,4 @@
-package com.byebyemeta
+package com.cleancopy
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -84,7 +84,7 @@ import java.util.Date
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ByeByeMetaApp(
+fun CleanCopyApp(
     selectedTab: Int,
     history: List<ClipboardHistoryEntry>,
     historyEnabled: Boolean,
@@ -113,7 +113,7 @@ fun ByeByeMetaApp(
                         when {
                             selectedTab == 1 -> "Settings"
                             selectedHistory != null -> "History detail"
-                            else -> "ByeByeMeta"
+                            else -> "CleanCopy"
                         }
                     )
                 },
@@ -324,7 +324,7 @@ private fun MediaPreview(entry: ClipboardHistoryEntry) {
                     addListener(object : Player.Listener {
                         override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                             playerError = error.message ?: error.errorCodeName
-                            Log.e("ByeByeMetaVideo", "Could not play ${entry.clipboardUri}", error)
+                            Log.e("CleanCopyVideo", "Could not play ${entry.clipboardUri}", error)
                         }
                     })
                     setMediaItem(

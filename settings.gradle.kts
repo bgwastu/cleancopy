@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "byebyemeta"
+rootProject.name = "cleancopy"
 include(":app")

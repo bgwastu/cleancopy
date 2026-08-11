@@ -1,4 +1,4 @@
-package com.byebyemeta
+package com.cleancopy
 
 import java.io.ByteArrayOutputStream
 import java.io.File

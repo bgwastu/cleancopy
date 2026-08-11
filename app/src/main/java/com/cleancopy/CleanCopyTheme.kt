@@ -1,4 +1,4 @@
-package com.byebyemeta
+package com.cleancopy
 
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -51,7 +51,7 @@ private val DarkPurple = darkColorScheme(
     outline = Color(0xFF938F99)
 )
 
-private val ByeByeMetaTypography = Typography(
+private val CleanCopyTypography = Typography(
     headlineSmall = TextStyle(fontWeight = FontWeight.SemiBold),
     titleLarge = TextStyle(fontWeight = FontWeight.SemiBold),
     titleMedium = TextStyle(fontWeight = FontWeight.SemiBold),
@@ -59,7 +59,7 @@ private val ByeByeMetaTypography = Typography(
 )
 
 @Composable
-fun ByeByeMetaTheme(content: @Composable () -> Unit) {
+fun CleanCopyTheme(content: @Composable () -> Unit) {
     val context = LocalContext.current
     val darkTheme = isSystemInDarkTheme()
     val colorScheme = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -71,7 +71,7 @@ fun ByeByeMetaTheme(content: @Composable () -> Unit) {
     }
     MaterialTheme(
         colorScheme = colorScheme,
-        typography = ByeByeMetaTypography,
+        typography = CleanCopyTypography,
         content = content
     )
 }

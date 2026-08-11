@@ -1,4 +1,4 @@
-package com.byebyemeta.clipboard
+package com.cleancopy.clipboard
 
 import android.app.Activity
 import android.content.ClipboardManager
@@ -29,6 +29,6 @@ class DebugClipboardActivity : Activity() {
     }
 
     companion object {
-        private const val TAG = "ByeByeMetaClipboardCheck"
+        private const val TAG = "CleanCopyClipboardCheck"
     }
 }

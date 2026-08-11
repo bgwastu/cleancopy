@@ -1,6 +1,6 @@
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="@color/bye_bye_meta_icon_background" />
+    <item android:drawable="@color/clean_copy_icon_background" />
     <item
-        android:drawable="@drawable/ic_bye_bye_meta_splash"
+        android:drawable="@drawable/ic_clean_copy_splash"
         android:gravity="center" />
 </layer-list>

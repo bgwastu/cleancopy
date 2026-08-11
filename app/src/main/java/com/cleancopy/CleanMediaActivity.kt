@@ -1,4 +1,4 @@
-package com.byebyemeta
+package com.cleancopy
 
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -99,7 +99,7 @@ class CleanMediaActivity : ComponentActivity() {
         val debugPath = if (BuildConfig.DEBUG) intent.getStringExtra(EXTRA_DEBUG_PATH) else null
         val debugSource = debugPath?.let(::copyDebugSource)
         setContent {
-            ByeByeMetaTheme {
+            CleanCopyTheme {
                 BackHandler(enabled = progressState.isProcessing) { cancelProcessing() }
                 ProcessingOverlay(progressState, ::cancelProcessing)
             }
@@ -285,7 +285,7 @@ class CleanMediaActivity : ComponentActivity() {
 
     private fun copyToClipboard(uris: List<Uri>) {
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val clip = ClipData.newUri(contentResolver, "ByeByeMeta clean media", uris.first())
+        val clip = ClipData.newUri(contentResolver, "CleanCopy clean media", uris.first())
         uris.drop(1).forEach { uri -> clip.addItem(ClipData.Item(uri)) }
         clipboard.setPrimaryClip(clip)
     }
@@ -295,7 +295,7 @@ class CleanMediaActivity : ComponentActivity() {
             type = "*/*"
             putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            clipData = ClipData.newUri(contentResolver, "ByeByeMeta clean media", uris.first()).also { clip ->
+            clipData = ClipData.newUri(contentResolver, "CleanCopy clean media", uris.first()).also { clip ->
                 uris.drop(1).forEach { clip.addItem(ClipData.Item(it)) }
             }
         }
@@ -345,10 +345,10 @@ class CleanMediaActivity : ComponentActivity() {
     }.getOrNull()
 
     companion object {
-        const val EXTRA_DEBUG_PATH = "com.byebyemeta.extra.CLEAN_DEBUG_PATH"
-        const val EXTRA_SAVE_TO_LIBRARY = "com.byebyemeta.extra.SAVE_TO_LIBRARY"
-        const val EXTRA_CURRENT_CLIPBOARD = "com.byebyemeta.extra.CURRENT_CLIPBOARD"
-        private const val TAG = "ByeByeMetaCleanMedia"
+        const val EXTRA_DEBUG_PATH = "com.cleancopy.extra.CLEAN_DEBUG_PATH"
+        const val EXTRA_SAVE_TO_LIBRARY = "com.cleancopy.extra.SAVE_TO_LIBRARY"
+        const val EXTRA_CURRENT_CLIPBOARD = "com.cleancopy.extra.CURRENT_CLIPBOARD"
+        private const val TAG = "CleanCopyCleanMedia"
     }
 }
 

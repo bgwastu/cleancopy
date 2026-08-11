@@ -1,4 +1,4 @@
-package com.byebyemeta.clipboard
+package com.cleancopy.clipboard
 
 import android.app.Activity
 import android.os.Bundle
@@ -32,7 +32,7 @@ class DebugInspectActivity : Activity() {
     }
 
     companion object {
-        private const val TAG = "ByeByeMetaInspect"
+        private const val TAG = "CleanCopyInspect"
         private val TAGS = listOf(
             "GPSLatitude", "GPSLongitude", "DateTimeOriginal", "Make", "Model",
             "Software", "UserComment", "Xmp"

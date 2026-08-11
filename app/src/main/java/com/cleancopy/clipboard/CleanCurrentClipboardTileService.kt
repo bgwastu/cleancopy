@@ -1,4 +1,4 @@
-package com.byebyemeta.clipboard
+package com.cleancopy.clipboard
 
 import android.app.PendingIntent
 import android.content.Intent
@@ -6,14 +6,14 @@ import android.graphics.drawable.Icon
 import android.os.Build
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
-import com.byebyemeta.CleanMediaActivity
+import com.cleancopy.CleanMediaActivity
 
 class CleanCurrentClipboardTileService : TileService() {
     override fun onStartListening() {
         super.onStartListening()
         qsTile?.apply {
-            icon = Icon.createWithResource(this@CleanCurrentClipboardTileService, com.byebyemeta.R.drawable.ic_clean_current_clipboard)
-            label = getString(com.byebyemeta.R.string.tile_clean_current)
+            icon = Icon.createWithResource(this@CleanCurrentClipboardTileService, com.cleancopy.R.drawable.ic_clean_current_clipboard)
+            label = getString(com.cleancopy.R.string.tile_clean_current)
             state = Tile.STATE_INACTIVE
             updateTile()
         }

@@ -1,14 +1,16 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
-    namespace = "com.byebyemeta"
+    namespace = "com.cleancopy"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.byebyemeta"
+        applicationId = "com.cleancopy"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
@@ -33,17 +35,15 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
+    kotlin {
+        compilerOptions {
+            jvmTarget.set(JvmTarget.JVM_17)
+        }
     }
 
     buildFeatures {
         compose = true
         buildConfig = true
-    }
-
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.8"
     }
 
     packaging.resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
