@@ -33,9 +33,13 @@ object MediaTypeDetector {
                 MediaDescriptor(MediaKind.IMAGE, mime, "webp")
             mime == "image/gif" ->
                 MediaDescriptor(MediaKind.IMAGE, mime, "gif")
+            mime == "image/heic" || mime == "image/heif" ->
+                MediaDescriptor(MediaKind.IMAGE, mime, "heic")
             mime == "video/mp4" || mime == "video/x-m4v" || mime == "video/3gpp" ->
                 MediaDescriptor(MediaKind.VIDEO, "video/mp4", "mp4")
             mime == "video/quicktime" ->
+                MediaDescriptor(MediaKind.VIDEO, "video/mp4", "mp4", requiresMp4Normalization = true)
+            mime == "video/webm" ->
                 MediaDescriptor(MediaKind.VIDEO, "video/mp4", "mp4", requiresMp4Normalization = true)
             else -> error("Unsupported media format: $mime")
         }
@@ -58,9 +62,11 @@ object MediaTypeDetector {
         "png" -> "image/png"
         "webp" -> "image/webp"
         "gif" -> "image/gif"
+        "heic", "heif" -> "image/heic"
         "mp4", "m4v" -> "video/mp4"
         "mov" -> "video/quicktime"
         "3gp" -> "video/3gpp"
+        "webm" -> "video/webm"
         else -> "application/octet-stream"
     }
 }

@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.provider.OpenableColumns
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -42,6 +43,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.Locale
 
 class CleanMediaActivity : ComponentActivity() {
     private var pickerLaunched = false
@@ -55,6 +57,7 @@ class CleanMediaActivity : ComponentActivity() {
     }
     private var destinationTreeUri: Uri? = null
     private var pendingUris: List<Uri> = emptyList()
+    private var clipboardMimeType: String? = null
 
     private val picker = registerForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments()
@@ -119,16 +122,24 @@ class CleanMediaActivity : ComponentActivity() {
     private fun resolveInputUris(): List<Uri> {
         if (!currentClipboard) return emptyList()
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clip = clipboard.primaryClip ?: return emptyList()
+        clipboardMimeType = (0 until clip.description.mimeTypeCount)
+            .map { clip.description.getMimeType(it) }
+            .firstOrNull { it.startsWith("image/") || it.startsWith("video/") }
         return buildList {
-            repeat(clipboard.primaryClip?.itemCount ?: 0) { index ->
-                clipboard.primaryClip?.getItemAt(index)?.uri?.let(::add)
+            repeat(clip.itemCount) { index ->
+                val item = clip.getItemAt(index)
+                val uri = item.uri ?: item.text?.toString()?.let { text ->
+                    runCatching { Uri.parse(text) }.getOrNull()
+                }
+                if (uri?.scheme == "content" || uri?.scheme == "file") add(uri)
             }
         }
     }
 
     private fun launchProcessing(uris: List<Uri>) {
         if (uris.isEmpty()) {
-            Toast.makeText(this, "No media found in the current clipboard", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "No image or video found in the current clipboard", Toast.LENGTH_SHORT).show()
             finish()
         } else {
             process(uris)
@@ -146,9 +157,14 @@ class CleanMediaActivity : ComponentActivity() {
 
         processingJob = lifecycleScope.launch {
             try {
+                val inputUris = if (currentClipboard) {
+                    withContext(Dispatchers.IO) { snapshotClipboardUris(uris, sessionDirectory) }
+                } else {
+                    uris
+                }
                 val prepared = mutableListOf<PreparedMedia>()
                 var skippedCount = 0
-                uris.forEachIndexed { index, uri ->
+                inputUris.forEachIndexed { index, uri ->
                     val inspection = withContext(Dispatchers.IO) {
                         ClipboardMetadataReader.inspect(this@CleanMediaActivity, uri)
                     }
@@ -189,7 +205,7 @@ class CleanMediaActivity : ComponentActivity() {
                         ) { itemProgress ->
                             withContext(Dispatchers.Main.immediate) {
                                 progressState = progressState.copy(
-                                    progress = ((index + itemProgress) / uris.size)
+                                    progress = ((index + itemProgress) / inputUris.size)
                                         .coerceIn(0f, 1f)
                                 )
                             }
@@ -288,6 +304,48 @@ class CleanMediaActivity : ComponentActivity() {
         val clip = ClipData.newUri(contentResolver, "CleanCopy clean media", uris.first())
         uris.drop(1).forEach { uri -> clip.addItem(ClipData.Item(uri)) }
         clipboard.setPrimaryClip(clip)
+    }
+
+    private fun snapshotClipboardUris(uris: List<Uri>, sessionDirectory: File): List<Uri> {
+        val inputDirectory = File(sessionDirectory, "inputs").apply { mkdirs() }
+        return uris.mapIndexed { index, source ->
+            val name = runCatching {
+                contentResolver.query(
+                    source,
+                    arrayOf(OpenableColumns.DISPLAY_NAME),
+                    null,
+                    null,
+                    null
+                )?.use { cursor ->
+                    if (cursor.moveToFirst()) cursor.getString(0) else null
+                }
+            }.getOrNull()
+            val extension = name?.substringAfterLast('.', "")?.lowercase(Locale.US)
+                ?.takeIf { it.isNotBlank() }
+                ?: extensionForMime(contentResolver.getType(source) ?: clipboardMimeType)
+                ?: "bin"
+            val safeBaseName = name?.let(::File)?.name?.takeIf { it.isNotBlank() }
+            val targetName = safeBaseName?.takeIf { it.substringAfterLast('.', "").isNotBlank() }
+                ?: "${safeBaseName ?: "clipboard_$index"}.$extension"
+            val target = File(inputDirectory, targetName)
+            contentResolver.openInputStream(source)?.use { input ->
+                target.outputStream().use { output -> input.copyTo(output) }
+            } ?: error("Could not read clipboard item ${index + 1}")
+            FileProvider.getUriForFile(this, "${BuildConfig.APPLICATION_ID}.fileprovider", target)
+        }
+    }
+
+    private fun extensionForMime(mimeType: String?): String? = when (mimeType?.lowercase(Locale.US)) {
+        "image/jpeg", "image/jpg" -> "jpg"
+        "image/png" -> "png"
+        "image/webp" -> "webp"
+        "image/gif" -> "gif"
+        "image/heic", "image/heif" -> "heic"
+        "video/mp4", "video/x-m4v" -> "mp4"
+        "video/quicktime" -> "mov"
+        "video/3gpp" -> "3gp"
+        "video/webm" -> "webm"
+        else -> null
     }
 
     private fun shareMedia(uris: List<Uri>) {

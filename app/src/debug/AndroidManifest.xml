@@ -1,10 +1,15 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
     <application>
         <activity
             android:name=".clipboard.DebugInspectActivity"
             android:exported="true" />
         <activity
             android:name=".clipboard.DebugClipboardActivity"
+            android:exported="true" />
+        <activity
+            android:name=".clipboard.DebugSeedClipboardActivity"
             android:exported="true" />
     </application>
 </manifest>

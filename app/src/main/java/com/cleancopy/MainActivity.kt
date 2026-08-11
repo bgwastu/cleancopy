@@ -56,6 +56,7 @@ class MainActivity : ComponentActivity() {
                     selectedHistory = selectedHistory,
                     onTabSelected = { selectedTab = it },
                     onCleanMedia = { openCleanMedia(saveToLibrary = false) },
+                    onCleanCurrentClipboard = { openCleanCurrentClipboard() },
                     onSaveMedia = { openCleanMedia(saveToLibrary = true) },
                     onHistorySelected = { selectedHistoryId = it.id },
                     onHistoryBack = { selectedHistoryId = null },
@@ -93,6 +94,14 @@ class MainActivity : ComponentActivity() {
         startActivity(
             Intent(this, CleanMediaActivity::class.java)
                 .putExtra(CleanMediaActivity.EXTRA_SAVE_TO_LIBRARY, saveToLibrary)
+        )
+    }
+
+    private fun openCleanCurrentClipboard() {
+        startActivity(
+            Intent(this, CleanMediaActivity::class.java)
+                .putExtra(CleanMediaActivity.EXTRA_SAVE_TO_LIBRARY, false)
+                .putExtra(CleanMediaActivity.EXTRA_CURRENT_CLIPBOARD, true)
         )
     }
 

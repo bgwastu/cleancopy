@@ -94,6 +94,7 @@ fun CleanCopyApp(
     selectedHistory: ClipboardHistoryEntry?,
     onTabSelected: (Int) -> Unit,
     onCleanMedia: () -> Unit,
+    onCleanCurrentClipboard: () -> Unit,
     onSaveMedia: () -> Unit,
     onHistorySelected: (ClipboardHistoryEntry) -> Unit,
     onHistoryBack: () -> Unit,
@@ -163,6 +164,7 @@ fun CleanCopyApp(
                     modifier = Modifier.padding(padding),
                     history = history,
                     onCleanMedia = onCleanMedia,
+                    onCleanCurrentClipboard = onCleanCurrentClipboard,
                     onSaveMedia = onSaveMedia,
                     onHistorySelected = onHistorySelected
                 )
@@ -193,6 +195,7 @@ private fun ClipboardPage(
     modifier: Modifier,
     history: List<ClipboardHistoryEntry>,
     onCleanMedia: () -> Unit,
+    onCleanCurrentClipboard: () -> Unit,
     onSaveMedia: () -> Unit,
     onHistorySelected: (ClipboardHistoryEntry) -> Unit
 ) {
@@ -233,6 +236,11 @@ private fun ClipboardPage(
                     Icon(Icons.Outlined.ContentCopy, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
                     Text("Clean and copy media")
+                }
+                Button(onClick = onCleanCurrentClipboard, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Outlined.ContentPaste, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Clean current clipboard")
                 }
                 Button(onClick = onSaveMedia, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Outlined.Save, contentDescription = null)
