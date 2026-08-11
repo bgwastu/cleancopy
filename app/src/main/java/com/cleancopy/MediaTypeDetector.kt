@@ -7,7 +7,8 @@ import java.util.Locale
 
 enum class MediaKind {
     IMAGE,
-    VIDEO
+    VIDEO,
+    LINK
 }
 
 data class MediaDescriptor(

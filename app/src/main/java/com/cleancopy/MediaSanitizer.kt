@@ -42,6 +42,7 @@ object MediaSanitizer {
             MediaKind.VIDEO -> withContext(Dispatchers.IO) {
                 VideoSanitizer.sanitize(context, source, output, compressVideo, onProgress)
             }
+            MediaKind.LINK -> error("Links are cleaned without media sanitization")
         }
     }
 }

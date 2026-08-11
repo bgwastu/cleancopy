@@ -36,6 +36,7 @@ object ClipboardMetadataReader {
         val fields = when (descriptor.kind) {
             MediaKind.IMAGE -> readImageFields(context, uri)
             MediaKind.VIDEO -> readVideoFields(context, uri)
+            MediaKind.LINK -> emptyList()
         }
         return MediaInspection(displayName(context, uri), descriptor.kind, fields)
     }
@@ -96,4 +97,5 @@ object ClipboardMetadataReader {
 fun formatMediaKind(kind: MediaKind): String = when (kind) {
     MediaKind.IMAGE -> "Image"
     MediaKind.VIDEO -> "Video"
+    MediaKind.LINK -> "Link"
 }

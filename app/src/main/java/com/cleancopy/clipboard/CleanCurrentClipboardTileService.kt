@@ -6,7 +6,7 @@ import android.graphics.drawable.Icon
 import android.os.Build
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
-import com.cleancopy.CleanMediaActivity
+import com.cleancopy.CleanClipboardActivity
 
 class CleanCurrentClipboardTileService : TileService() {
     override fun onStartListening() {
@@ -21,9 +21,7 @@ class CleanCurrentClipboardTileService : TileService() {
 
     override fun onClick() {
         super.onClick()
-        val intent = Intent(this, CleanMediaActivity::class.java)
-            .putExtra(CleanMediaActivity.EXTRA_SAVE_TO_LIBRARY, false)
-            .putExtra(CleanMediaActivity.EXTRA_CURRENT_CLIPBOARD, true)
+        val intent = Intent(this, CleanClipboardActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             val pendingIntent = PendingIntent.getActivity(

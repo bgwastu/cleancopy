@@ -1,0 +1,4 @@
+<resources>
+    <!-- Android 12+ resolves this from the user's wallpaper-derived Material palette. -->
+    <color name="clean_copy_icon_background">@android:color/system_accent1_500</color>
+</resources>

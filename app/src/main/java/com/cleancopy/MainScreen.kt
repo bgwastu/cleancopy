@@ -29,6 +29,7 @@ import androidx.compose.material.icons.outlined.ContentPaste
 import androidx.compose.material.icons.outlined.ContentPasteSearch
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Movie
 import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Save
@@ -92,8 +93,12 @@ fun CleanCopyApp(
     outputName: String,
     compressVideo: Boolean,
     selectedHistory: ClipboardHistoryEntry?,
+    linkCleaningEnabled: Boolean,
+    linkRuleStatus: String?,
+    linkRulesUpdating: Boolean,
     onTabSelected: (Int) -> Unit,
     onCleanMedia: () -> Unit,
+    onCleanLinks: () -> Unit,
     onCleanCurrentClipboard: () -> Unit,
     onSaveMedia: () -> Unit,
     onHistorySelected: (ClipboardHistoryEntry) -> Unit,
@@ -103,7 +108,9 @@ fun CleanCopyApp(
     onHistoryEnabledChanged: (Boolean) -> Unit,
     onRewriteFilenameChanged: (Boolean) -> Unit,
     onOutputNameChanged: (String) -> Unit,
-    onCompressVideoChanged: (Boolean) -> Unit
+    onCompressVideoChanged: (Boolean) -> Unit,
+    onLinkCleaningEnabledChanged: (Boolean) -> Unit,
+    onUpdateLinkRules: () -> Unit
 ) {
     BackHandler(enabled = selectedHistory != null && selectedTab == 0, onBack = onHistoryBack)
     Scaffold(
@@ -164,6 +171,7 @@ fun CleanCopyApp(
                     modifier = Modifier.padding(padding),
                     history = history,
                     onCleanMedia = onCleanMedia,
+                    onCleanLinks = if (linkCleaningEnabled) onCleanLinks else null,
                     onCleanCurrentClipboard = onCleanCurrentClipboard,
                     onSaveMedia = onSaveMedia,
                     onHistorySelected = onHistorySelected
@@ -181,10 +189,15 @@ fun CleanCopyApp(
                 outputName = outputName,
                 compressVideo = compressVideo,
                 historyEnabled = historyEnabled,
+                linkCleaningEnabled = linkCleaningEnabled,
+                linkRuleStatus = linkRuleStatus,
+                linkRulesUpdating = linkRulesUpdating,
                 onRewriteFilenameChanged = onRewriteFilenameChanged,
                 onOutputNameChanged = onOutputNameChanged,
                 onCompressVideoChanged = onCompressVideoChanged,
-                onHistoryEnabledChanged = onHistoryEnabledChanged
+                onHistoryEnabledChanged = onHistoryEnabledChanged,
+                onLinkCleaningEnabledChanged = onLinkCleaningEnabledChanged,
+                onUpdateLinkRules = onUpdateLinkRules
             )
         }
     }
@@ -195,6 +208,7 @@ private fun ClipboardPage(
     modifier: Modifier,
     history: List<ClipboardHistoryEntry>,
     onCleanMedia: () -> Unit,
+    onCleanLinks: (() -> Unit)?,
     onCleanCurrentClipboard: () -> Unit,
     onSaveMedia: () -> Unit,
     onHistorySelected: (ClipboardHistoryEntry) -> Unit
@@ -236,6 +250,13 @@ private fun ClipboardPage(
                     Icon(Icons.Outlined.ContentCopy, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
                     Text("Clean and copy media")
+                }
+                onCleanLinks?.let { cleanLinks ->
+                    Button(onClick = cleanLinks, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Outlined.Link, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Clean copied links")
+                    }
                 }
                 Button(onClick = onCleanCurrentClipboard, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Outlined.ContentPaste, contentDescription = null)
@@ -282,19 +303,27 @@ private fun HistoryDetailPage(
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        MediaPreview(entry)
+        if (entry.kind != MediaKind.LINK) MediaPreview(entry)
         Text(entry.sourceName, style = MaterialTheme.typography.titleLarge)
         Text(
             "Cleaned ${formatTime(entry.capturedAt)}",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        MetadataBlock("Old metadata", entry.before, "No metadata was recorded")
         MetadataBlock(
-            "Location",
-            entry.before.filter { it.label == "GPS latitude" || it.label == "GPS longitude" || it.label == "Location" },
-            "No location metadata"
+            if (entry.kind == MediaKind.LINK) "Original links" else "Old metadata",
+            entry.before,
+            if (entry.kind == MediaKind.LINK) "No links were recorded" else "No metadata was recorded"
         )
+        if (entry.kind == MediaKind.LINK) {
+            MetadataBlock("Cleaned links", entry.after, "No links were cleaned")
+        } else {
+            MetadataBlock(
+                "Location",
+                entry.before.filter { it.label == "GPS latitude" || it.label == "GPS longitude" || it.label == "Location" },
+                "No location metadata"
+            )
+        }
     }
 }
 
@@ -480,7 +509,11 @@ private fun HistoryRow(entry: ClipboardHistoryEntry, onClick: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                if (entry.kind == MediaKind.IMAGE) Icons.Outlined.Image else Icons.Outlined.Movie,
+                when (entry.kind) {
+                    MediaKind.IMAGE -> Icons.Outlined.Image
+                    MediaKind.VIDEO -> Icons.Outlined.Movie
+                    MediaKind.LINK -> Icons.Outlined.Link
+                },
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary
             )
@@ -516,10 +549,15 @@ private fun SettingsPage(
     outputName: String,
     compressVideo: Boolean,
     historyEnabled: Boolean,
+    linkCleaningEnabled: Boolean,
+    linkRuleStatus: String?,
+    linkRulesUpdating: Boolean,
     onRewriteFilenameChanged: (Boolean) -> Unit,
     onOutputNameChanged: (String) -> Unit,
     onCompressVideoChanged: (Boolean) -> Unit,
-    onHistoryEnabledChanged: (Boolean) -> Unit
+    onHistoryEnabledChanged: (Boolean) -> Unit,
+    onLinkCleaningEnabledChanged: (Boolean) -> Unit,
+    onUpdateLinkRules: () -> Unit
 ) {
     Column(
         modifier = modifier
@@ -562,6 +600,27 @@ private fun SettingsPage(
             checked = historyEnabled,
             onCheckedChange = onHistoryEnabledChanged
         )
+
+        Text("Links", style = MaterialTheme.typography.headlineSmall)
+        SettingSwitch(
+            icon = Icons.Outlined.Link,
+            title = "Clean copied links",
+            supporting = "Automatically clean link tracking when you use Clean current clipboard",
+            checked = linkCleaningEnabled,
+            onCheckedChange = onLinkCleaningEnabledChanged
+        )
+        if (linkCleaningEnabled) {
+            Button(onClick = onUpdateLinkRules, enabled = !linkRulesUpdating, modifier = Modifier.fillMaxWidth()) {
+                if (linkRulesUpdating) {
+                    LinearProgressIndicator(modifier = Modifier.width(24.dp))
+                }
+                Spacer(Modifier.width(8.dp))
+                Text(if (linkRulesUpdating) "Updating rules" else "Update link-cleaning rules")
+            }
+            linkRuleStatus?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
 
     }
 }
