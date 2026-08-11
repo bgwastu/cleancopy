@@ -272,7 +272,7 @@ object NetworkRedirectResolver {
         if (host !in shortenerHosts && !isFacebookShare) {
             return LinkCleanResult(url, url, emptyList(), emptyList())
         }
-        var current = url
+        var current = if (isFacebookShare) facebookMobileUrl(url) else url
         val hops = mutableListOf<String>()
         repeat(5) {
             val connection = URL(current).openConnection() as HttpURLConnection
@@ -303,8 +303,15 @@ object NetworkRedirectResolver {
                 return@repeat
             }
             val location = if (code in 300..399) connection.getHeaderField("Location") else null
+            val refresh = if (isFacebookShare) connection.getHeaderField("Refresh") else null
             connection.disconnect()
-            if (location.isNullOrBlank()) return LinkCleanResult(url, current, emptyList(), hops)
+            if (location.isNullOrBlank()) {
+                val facebookTarget = refresh?.let(::facebookRefreshTarget)
+                if (facebookTarget != null) {
+                    return LinkCleanResult(url, facebookTarget, emptyList(), hops + "Facebook")
+                }
+                return LinkCleanResult(url, if (isFacebookShare && hops.isEmpty()) url else current, emptyList(), hops)
+            }
             val next = URI(current).resolve(location).toString()
             if (!isHttpNetworkUrl(next)) return LinkCleanResult(url, current, emptyList(), hops, "Redirected to an unsupported URL")
             hops += Uri.parse(current).host.orEmpty()
@@ -320,6 +327,26 @@ object NetworkRedirectResolver {
     private fun facebookSharePath(value: String): Boolean = runCatching {
         URI(value).path?.lowercase(Locale.US)?.startsWith("/share/") == true
     }.getOrDefault(false)
+
+    private fun facebookMobileUrl(value: String): String = runCatching {
+        URI(value).let { uri ->
+            URI(
+                "https",
+                "m.facebook.com",
+                uri.path,
+                uri.rawQuery,
+                uri.rawFragment
+            ).toString()
+        }
+    }.getOrDefault(value)
+
+    internal fun facebookRefreshTarget(value: String): String? = runCatching {
+        Regex("(?:^|;)\\s*URL=fb://(?:fullscreen_video|video)/(\\d+)", RegexOption.IGNORE_CASE)
+            .find(value)
+            ?.groupValues
+            ?.get(1)
+            ?.let { "https://www.facebook.com/reel/$it" }
+    }.getOrNull()
 
     private val shortenerHosts = setOf(
         "t.co",

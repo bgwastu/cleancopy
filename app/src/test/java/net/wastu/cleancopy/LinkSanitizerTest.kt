@@ -103,4 +103,14 @@ class LinkSanitizerTest {
         assertEquals(canonicalUrl, result.text)
         assertTrue(result.links.single().changed)
     }
+
+    @Test
+    fun convertsFacebookMobileRefreshTargetsToReels() {
+        assertEquals(
+            "https://www.facebook.com/reel/1293868375968987",
+            NetworkRedirectResolver.facebookRefreshTarget(
+                "0; URL=fb://fullscreen_video/1293868375968987?loop=false"
+            )
+        )
+    }
 }
