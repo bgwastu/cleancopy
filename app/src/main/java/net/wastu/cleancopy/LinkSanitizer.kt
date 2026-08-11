@@ -268,7 +268,10 @@ object NetworkRedirectResolver {
     fun resolve(url: String): LinkCleanResult {
         val host = runCatching { URI(url).host?.lowercase(Locale.US) }.getOrNull()
             ?: return LinkCleanResult(url, url, emptyList(), emptyList())
-        if (host !in shortenerHosts) return LinkCleanResult(url, url, emptyList(), emptyList())
+        val isFacebookShare = host in facebookHosts && facebookSharePath(url)
+        if (host !in shortenerHosts && !isFacebookShare) {
+            return LinkCleanResult(url, url, emptyList(), emptyList())
+        }
         var current = url
         val hops = mutableListOf<String>()
         repeat(5) {
@@ -276,7 +279,8 @@ object NetworkRedirectResolver {
             connection.connectTimeout = 10_000
             connection.readTimeout = 15_000
             connection.instanceFollowRedirects = false
-            connection.requestMethod = "HEAD"
+            connection.requestMethod = if (isFacebookShare) "GET" else "HEAD"
+            connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36")
             var code = runCatching { connection.responseCode }.getOrElse {
                 return LinkCleanResult(url, current, emptyList(), hops, it.message)
             }
@@ -313,6 +317,10 @@ object NetworkRedirectResolver {
         URI(value).let { it.scheme?.lowercase(Locale.US) in setOf("http", "https") && !it.host.isNullOrBlank() }
     }.getOrDefault(false)
 
+    private fun facebookSharePath(value: String): Boolean = runCatching {
+        URI(value).path?.lowercase(Locale.US)?.startsWith("/share/") == true
+    }.getOrDefault(false)
+
     private val shortenerHosts = setOf(
         "t.co",
         "bit.ly",
@@ -322,5 +330,11 @@ object NetworkRedirectResolver {
         "ow.ly",
         "rebrand.ly",
         "shorturl.at"
+    )
+
+    private val facebookHosts = setOf(
+        "facebook.com",
+        "www.facebook.com",
+        "m.facebook.com"
     )
 }

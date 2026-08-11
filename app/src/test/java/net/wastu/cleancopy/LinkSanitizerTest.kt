@@ -87,4 +87,20 @@ class LinkSanitizerTest {
 
         assertEquals(url, NetworkRedirectResolver.resolve(url).cleaned)
     }
+
+    @Test
+    fun replacesFacebookShareLinksWithResolvedCanonicalLinks() {
+        val shareUrl = "https://www.facebook.com/share/r/1ELDAtuxZq/"
+        val canonicalUrl = "https://www.facebook.com/reel/1293868375968987"
+
+        val result = LinkSanitizer.cleanText(
+            shareUrl,
+            emptyList(),
+            removeReferrals = false,
+            resolver = { LinkCleanResult(shareUrl, canonicalUrl, emptyList(), listOf("Facebook")) }
+        )
+
+        assertEquals(canonicalUrl, result.text)
+        assertTrue(result.links.single().changed)
+    }
 }

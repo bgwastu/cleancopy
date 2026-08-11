@@ -23,18 +23,22 @@ class CleanClipboardActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.decorView.post(::processClipboard)
+        window.decorView.post { processClipboard() }
     }
 
-    private fun processClipboard() {
+    private fun processClipboard(attempt: Int = 0) {
         if (started) return
-        started = true
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         val clip = clipboard.primaryClip
         if (clip == null) {
-            finishWithToast("The clipboard is empty")
+            if (attempt < CLIPBOARD_READ_RETRIES) {
+                window.decorView.postDelayed({ processClipboard(attempt + 1) }, CLIPBOARD_RETRY_DELAY_MS)
+            } else {
+                finishWithToast("The clipboard is empty")
+            }
             return
         }
+        started = true
 
         val text = clip.webText()
         if (LinkCleanupStore.isEnabled(this) && LinkSanitizer.containsLink(text)) {
@@ -85,7 +89,9 @@ class CleanClipboardActivity : ComponentActivity() {
     private fun ClipData.webText(): String = buildList {
         repeat(itemCount) { index ->
             val item = getItemAt(index)
-            item.text?.toString()?.takeIf { it.isNotBlank() }?.let(::add)
+            item.coerceToText(this@CleanClipboardActivity)?.toString()
+                ?.takeIf { it.isNotBlank() }
+                ?.let(::add)
             item.uri?.takeIf { it.scheme in setOf("http", "https") }?.toString()?.let(::add)
         }
     }.joinToString("\n")
@@ -164,5 +170,10 @@ class CleanClipboardActivity : ComponentActivity() {
     private fun finishWithToast(message: String, duration: Int = Toast.LENGTH_SHORT) {
         Toast.makeText(this, message, duration).show()
         finish()
+    }
+
+    private companion object {
+        const val CLIPBOARD_READ_RETRIES = 5
+        const val CLIPBOARD_RETRY_DELAY_MS = 100L
     }
 }
