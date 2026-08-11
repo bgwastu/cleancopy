@@ -51,6 +51,15 @@
             android:name=".CleanClipboardActivity"
             android:exported="false" />
 
+        <activity
+            android:name=".CleanCopyTilePreferencesActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE_PREFERENCES" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
         <service
             android:name=".clipboard.CleanCopyTileService"
             android:exported="true"
@@ -67,6 +76,17 @@
             android:exported="true"
             android:icon="@drawable/ic_clean_current_clipboard"
             android:label="@string/tile_clean_current"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
+        <service
+            android:name=".clipboard.CleanCopyDefaultTileService"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher"
+            android:label="@string/tile_cleancopy"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
             <intent-filter>
                 <action android:name="android.service.quicksettings.action.QS_TILE" />

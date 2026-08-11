@@ -44,7 +44,6 @@ class MainActivity : ComponentActivity() {
             var linkCleaningEnabled by remember(resumeTick) {
                 mutableStateOf(LinkCleanupStore.isEnabled(this@MainActivity))
             }
-            var linkRuleStatus by rememberSaveable { mutableStateOf<String?>(null) }
             var linkRulesUpdating by rememberSaveable { mutableStateOf(false) }
             var history by remember(resumeTick) {
                 mutableStateOf(ClipboardHistoryStore.entries(this@MainActivity))
@@ -64,11 +63,9 @@ class MainActivity : ComponentActivity() {
                     compressVideo = compressVideo,
                     selectedHistory = selectedHistory,
                     linkCleaningEnabled = linkCleaningEnabled,
-                    linkRuleStatus = linkRuleStatus,
                     linkRulesUpdating = linkRulesUpdating,
                     onTabSelected = { selectedTab = it },
                     onCleanMedia = { openCleanMedia(saveToLibrary = false) },
-                    onCleanLinks = { cleanClipboardLinks() },
                     onCleanCurrentClipboard = { openCleanCurrentClipboard() },
                     onSaveMedia = { openCleanMedia(saveToLibrary = true) },
                     onHistorySelected = { selectedHistoryId = it.id },
@@ -103,10 +100,14 @@ class MainActivity : ComponentActivity() {
                             val result = runCatching {
                                 withContext(Dispatchers.IO) { LinkRuleStore.update(this@MainActivity) }
                             }
-                            linkRuleStatus = result.fold(
-                                onSuccess = { "Updated $it link-cleaning providers" },
-                                onFailure = { it.message ?: "Could not update link-cleaning rules" }
-                            )
+                            Toast.makeText(
+                                this@MainActivity,
+                                result.fold(
+                                    onSuccess = { "Updated $it link-cleaning providers" },
+                                    onFailure = { it.message ?: "Could not update link-cleaning rules" }
+                                ),
+                                Toast.LENGTH_LONG
+                            ).show()
                             linkRulesUpdating = false
                         }
                     }
@@ -129,51 +130,6 @@ class MainActivity : ComponentActivity() {
 
     private fun openCleanCurrentClipboard() {
         startActivity(Intent(this, CleanClipboardActivity::class.java))
-    }
-
-    private fun cleanClipboardLinks() {
-        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val text = clipboard.primaryClip
-            ?.takeIf { it.itemCount > 0 }
-            ?.getItemAt(0)
-            ?.coerceToText(this)
-            ?.toString()
-            .orEmpty()
-        if (!LinkSanitizer.containsLink(text)) {
-            Toast.makeText(this, "No web link found in the clipboard", Toast.LENGTH_SHORT).show()
-            return
-        }
-        lifecycleScope.launch {
-            val result = withContext(Dispatchers.IO) {
-                LinkSanitizer.cleanText(
-                    text,
-                    LinkRuleStore.providers(this@MainActivity),
-                    removeReferrals = false,
-                    resolver = NetworkRedirectResolver::resolve
-                )
-            }
-            clipboard.setPrimaryClip(ClipData.newPlainText("CleanCopy clean links", result.text))
-            val count = result.links.count { it.changed }
-            if (count > 0) {
-                ClipboardHistoryStore.record(
-                    this@MainActivity,
-                    ClipboardHistoryEntry(
-                        id = System.currentTimeMillis(),
-                        clipboardUri = result.text,
-                        sourceName = "Cleaned links",
-                        kind = MediaKind.LINK,
-                        capturedAt = System.currentTimeMillis(),
-                        before = result.links.map { MetadataField("Original link", it.original) },
-                        after = result.links.map { MetadataField("Clean link", it.cleaned) }
-                    )
-                )
-            }
-            Toast.makeText(
-                this@MainActivity,
-                if (count == 0) "No tracking found in copied links" else "$count link(s) cleaned and copied",
-                Toast.LENGTH_SHORT
-            ).show()
-        }
     }
 
     private fun openHistoryMedia(entry: ClipboardHistoryEntry) {

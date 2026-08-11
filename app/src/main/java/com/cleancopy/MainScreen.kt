@@ -64,6 +64,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
@@ -94,11 +95,9 @@ fun CleanCopyApp(
     compressVideo: Boolean,
     selectedHistory: ClipboardHistoryEntry?,
     linkCleaningEnabled: Boolean,
-    linkRuleStatus: String?,
     linkRulesUpdating: Boolean,
     onTabSelected: (Int) -> Unit,
     onCleanMedia: () -> Unit,
-    onCleanLinks: () -> Unit,
     onCleanCurrentClipboard: () -> Unit,
     onSaveMedia: () -> Unit,
     onHistorySelected: (ClipboardHistoryEntry) -> Unit,
@@ -171,7 +170,6 @@ fun CleanCopyApp(
                     modifier = Modifier.padding(padding),
                     history = history,
                     onCleanMedia = onCleanMedia,
-                    onCleanLinks = if (linkCleaningEnabled) onCleanLinks else null,
                     onCleanCurrentClipboard = onCleanCurrentClipboard,
                     onSaveMedia = onSaveMedia,
                     onHistorySelected = onHistorySelected
@@ -190,7 +188,6 @@ fun CleanCopyApp(
                 compressVideo = compressVideo,
                 historyEnabled = historyEnabled,
                 linkCleaningEnabled = linkCleaningEnabled,
-                linkRuleStatus = linkRuleStatus,
                 linkRulesUpdating = linkRulesUpdating,
                 onRewriteFilenameChanged = onRewriteFilenameChanged,
                 onOutputNameChanged = onOutputNameChanged,
@@ -208,7 +205,6 @@ private fun ClipboardPage(
     modifier: Modifier,
     history: List<ClipboardHistoryEntry>,
     onCleanMedia: () -> Unit,
-    onCleanLinks: (() -> Unit)?,
     onCleanCurrentClipboard: () -> Unit,
     onSaveMedia: () -> Unit,
     onHistorySelected: (ClipboardHistoryEntry) -> Unit
@@ -244,29 +240,24 @@ private fun ClipboardPage(
                 Text("Create a private media copy", style = MaterialTheme.typography.titleLarge)
                 Text(
                     "Remove location and other identifying metadata before you paste or save it.",
-                    style = MaterialTheme.typography.bodyMedium
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
                 )
+                Button(onClick = onCleanCurrentClipboard, modifier = Modifier.fillMaxWidth()) {
+                    Icon(painterResource(R.drawable.ic_clean_current_clipboard), contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Clean current clipboard")
+                }
                 Button(onClick = onCleanMedia, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Outlined.ContentCopy, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Clean and copy media")
-                }
-                onCleanLinks?.let { cleanLinks ->
-                    Button(onClick = cleanLinks, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Outlined.Link, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Clean copied links")
-                    }
-                }
-                Button(onClick = onCleanCurrentClipboard, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Outlined.ContentPaste, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Clean current clipboard")
+                    Text("Choose media & copy")
                 }
                 Button(onClick = onSaveMedia, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Outlined.Save, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Clean and save media")
+                    Text("Choose media & save")
                 }
             }
         }
@@ -550,7 +541,6 @@ private fun SettingsPage(
     compressVideo: Boolean,
     historyEnabled: Boolean,
     linkCleaningEnabled: Boolean,
-    linkRuleStatus: String?,
     linkRulesUpdating: Boolean,
     onRewriteFilenameChanged: (Boolean) -> Unit,
     onOutputNameChanged: (String) -> Unit,
@@ -605,7 +595,7 @@ private fun SettingsPage(
         SettingSwitch(
             icon = Icons.Outlined.Link,
             title = "Clean copied links",
-            supporting = "Automatically clean link tracking when you use Clean current clipboard",
+            supporting = "Clean tracking in copied links when you select Clean current clipboard",
             checked = linkCleaningEnabled,
             onCheckedChange = onLinkCleaningEnabledChanged
         )
@@ -616,9 +606,6 @@ private fun SettingsPage(
                 }
                 Spacer(Modifier.width(8.dp))
                 Text(if (linkRulesUpdating) "Updating rules" else "Update link-cleaning rules")
-            }
-            linkRuleStatus?.let {
-                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
 

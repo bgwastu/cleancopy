@@ -1,5 +1,13 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
+val gitVersionName = providers.exec {
+    commandLine("git", "describe", "--tags", "--always", "--dirty")
+}.standardOutput.asText.map { it.trim().removePrefix("v") }
+
+val gitVersionCode = providers.exec {
+    commandLine("git", "rev-list", "--count", "HEAD")
+}.standardOutput.asText.map { it.trim().toInt() }
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
@@ -13,8 +21,8 @@ android {
         applicationId = "com.cleancopy"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = gitVersionCode.get()
+        versionName = gitVersionName.get()
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true

@@ -266,6 +266,9 @@ object LinkRuleStore {
 
 object NetworkRedirectResolver {
     fun resolve(url: String): LinkCleanResult {
+        val host = runCatching { URI(url).host?.lowercase(Locale.US) }.getOrNull()
+            ?: return LinkCleanResult(url, url, emptyList(), emptyList())
+        if (host !in shortenerHosts) return LinkCleanResult(url, url, emptyList(), emptyList())
         var current = url
         val hops = mutableListOf<String>()
         repeat(5) {
@@ -309,4 +312,15 @@ object NetworkRedirectResolver {
     private fun isHttpNetworkUrl(value: String): Boolean = runCatching {
         URI(value).let { it.scheme?.lowercase(Locale.US) in setOf("http", "https") && !it.host.isNullOrBlank() }
     }.getOrDefault(false)
+
+    private val shortenerHosts = setOf(
+        "t.co",
+        "bit.ly",
+        "buff.ly",
+        "tinyurl.com",
+        "is.gd",
+        "ow.ly",
+        "rebrand.ly",
+        "shorturl.at"
+    )
 }

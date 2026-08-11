@@ -80,4 +80,11 @@ class LinkSanitizerTest {
         assertFalse(result.changed)
         assertTrue(result.error?.contains("HTTP") == true)
     }
+
+    @Test
+    fun doesNotResolveNormalInstagramUrlsThroughTheNetwork() {
+        val url = "https://www.instagram.com/reels/Db09qqcPagb/"
+
+        assertEquals(url, NetworkRedirectResolver.resolve(url).cleaned)
+    }
 }
