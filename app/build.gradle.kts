@@ -14,11 +14,11 @@ plugins {
 }
 
 android {
-    namespace = "com.cleancopy"
+    namespace = "net.wastu.cleancopy"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.cleancopy"
+        applicationId = "net.wastu.cleancopy"
         minSdk = 26
         targetSdk = 35
         versionCode = gitVersionCode.get()
