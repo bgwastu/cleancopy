@@ -26,6 +26,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        refreshLinkRules()
         setContent {
             var selectedTab by rememberSaveable { mutableIntStateOf(0) }
             var rewriteFilename by remember(resumeTick) {
@@ -44,7 +45,6 @@ class MainActivity : ComponentActivity() {
             var linkCleaningEnabled by remember(resumeTick) {
                 mutableStateOf(LinkCleanupStore.isEnabled(this@MainActivity))
             }
-            var linkRulesUpdating by rememberSaveable { mutableStateOf(false) }
             var history by remember(resumeTick) {
                 mutableStateOf(ClipboardHistoryStore.entries(this@MainActivity))
             }
@@ -63,7 +63,6 @@ class MainActivity : ComponentActivity() {
                     compressVideo = compressVideo,
                     selectedHistory = selectedHistory,
                     linkCleaningEnabled = linkCleaningEnabled,
-                    linkRulesUpdating = linkRulesUpdating,
                     onTabSelected = { selectedTab = it },
                     onCleanMedia = { openCleanMedia(saveToLibrary = false) },
                     onCleanCurrentClipboard = { openCleanCurrentClipboard() },
@@ -93,23 +92,6 @@ class MainActivity : ComponentActivity() {
                     onLinkCleaningEnabledChanged = {
                         linkCleaningEnabled = it
                         LinkCleanupStore.setEnabled(this@MainActivity, it)
-                    },
-                    onUpdateLinkRules = {
-                        linkRulesUpdating = true
-                        lifecycleScope.launch {
-                            val result = runCatching {
-                                withContext(Dispatchers.IO) { LinkRuleStore.update(this@MainActivity) }
-                            }
-                            Toast.makeText(
-                                this@MainActivity,
-                                result.fold(
-                                    onSuccess = { "Updated $it link-cleaning providers" },
-                                    onFailure = { it.message ?: "Could not update link-cleaning rules" }
-                                ),
-                                Toast.LENGTH_LONG
-                            ).show()
-                            linkRulesUpdating = false
-                        }
                     }
                 )
             }
@@ -130,6 +112,19 @@ class MainActivity : ComponentActivity() {
 
     private fun openCleanCurrentClipboard() {
         startActivity(Intent(this, CleanClipboardActivity::class.java))
+    }
+
+    private fun refreshLinkRules() {
+        lifecycleScope.launch {
+            runCatching { withContext(Dispatchers.IO) { LinkRuleStore.update(this@MainActivity) } }
+                .onFailure { error ->
+                    Toast.makeText(
+                        this@MainActivity,
+                        error.message ?: "Could not update link-cleaning rules",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+        }
     }
 
     private fun openHistoryMedia(entry: ClipboardHistoryEntry) {

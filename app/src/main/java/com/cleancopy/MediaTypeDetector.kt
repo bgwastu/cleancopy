@@ -15,7 +15,8 @@ data class MediaDescriptor(
     val kind: MediaKind,
     val mimeType: String,
     val outputExtension: String,
-    val requiresMp4Normalization: Boolean = false
+    val requiresMp4Normalization: Boolean = false,
+    val sourceMimeType: String = mimeType
 )
 
 object MediaTypeDetector {
@@ -35,7 +36,7 @@ object MediaTypeDetector {
             mime == "image/gif" ->
                 MediaDescriptor(MediaKind.IMAGE, mime, "gif")
             mime == "image/heic" || mime == "image/heif" ->
-                MediaDescriptor(MediaKind.IMAGE, mime, "heic")
+                MediaDescriptor(MediaKind.IMAGE, "image/jpeg", "jpg", sourceMimeType = mime)
             mime == "video/mp4" || mime == "video/x-m4v" || mime == "video/3gpp" ->
                 MediaDescriptor(MediaKind.VIDEO, "video/mp4", "mp4")
             mime == "video/quicktime" ->

@@ -95,7 +95,6 @@ fun CleanCopyApp(
     compressVideo: Boolean,
     selectedHistory: ClipboardHistoryEntry?,
     linkCleaningEnabled: Boolean,
-    linkRulesUpdating: Boolean,
     onTabSelected: (Int) -> Unit,
     onCleanMedia: () -> Unit,
     onCleanCurrentClipboard: () -> Unit,
@@ -108,8 +107,7 @@ fun CleanCopyApp(
     onRewriteFilenameChanged: (Boolean) -> Unit,
     onOutputNameChanged: (String) -> Unit,
     onCompressVideoChanged: (Boolean) -> Unit,
-    onLinkCleaningEnabledChanged: (Boolean) -> Unit,
-    onUpdateLinkRules: () -> Unit
+    onLinkCleaningEnabledChanged: (Boolean) -> Unit
 ) {
     BackHandler(enabled = selectedHistory != null && selectedTab == 0, onBack = onHistoryBack)
     Scaffold(
@@ -188,13 +186,11 @@ fun CleanCopyApp(
                 compressVideo = compressVideo,
                 historyEnabled = historyEnabled,
                 linkCleaningEnabled = linkCleaningEnabled,
-                linkRulesUpdating = linkRulesUpdating,
                 onRewriteFilenameChanged = onRewriteFilenameChanged,
                 onOutputNameChanged = onOutputNameChanged,
                 onCompressVideoChanged = onCompressVideoChanged,
                 onHistoryEnabledChanged = onHistoryEnabledChanged,
-                onLinkCleaningEnabledChanged = onLinkCleaningEnabledChanged,
-                onUpdateLinkRules = onUpdateLinkRules
+                onLinkCleaningEnabledChanged = onLinkCleaningEnabledChanged
             )
         }
     }
@@ -541,13 +537,11 @@ private fun SettingsPage(
     compressVideo: Boolean,
     historyEnabled: Boolean,
     linkCleaningEnabled: Boolean,
-    linkRulesUpdating: Boolean,
     onRewriteFilenameChanged: (Boolean) -> Unit,
     onOutputNameChanged: (String) -> Unit,
     onCompressVideoChanged: (Boolean) -> Unit,
     onHistoryEnabledChanged: (Boolean) -> Unit,
-    onLinkCleaningEnabledChanged: (Boolean) -> Unit,
-    onUpdateLinkRules: () -> Unit
+    onLinkCleaningEnabledChanged: (Boolean) -> Unit
 ) {
     Column(
         modifier = modifier
@@ -599,15 +593,6 @@ private fun SettingsPage(
             checked = linkCleaningEnabled,
             onCheckedChange = onLinkCleaningEnabledChanged
         )
-        if (linkCleaningEnabled) {
-            Button(onClick = onUpdateLinkRules, enabled = !linkRulesUpdating, modifier = Modifier.fillMaxWidth()) {
-                if (linkRulesUpdating) {
-                    LinearProgressIndicator(modifier = Modifier.width(24.dp))
-                }
-                Spacer(Modifier.width(8.dp))
-                Text(if (linkRulesUpdating) "Updating rules" else "Update link-cleaning rules")
-            }
-        }
 
     }
 }

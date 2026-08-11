@@ -1,7 +1,11 @@
 package com.cleancopy
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
 import android.net.Uri
+import android.os.Build
 import androidx.exifinterface.media.ExifInterface
 import java.io.File
 
@@ -46,9 +50,13 @@ object ImageSanitizer {
             ?: File.createTempFile("${outputBaseName}_", ".$extension", outputDir)
         output.parentFile?.mkdirs()
         try {
-            context.contentResolver.openInputStream(source)?.use { input ->
-                output.outputStream().use { out -> input.copyTo(out) }
-            } ?: error("The source image could not be opened")
+            if (descriptor.sourceMimeType in setOf("image/heic", "image/heif")) {
+                transcodeHeic(context, source, output)
+            } else {
+                context.contentResolver.openInputStream(source)?.use { input ->
+                    output.outputStream().use { out -> input.copyTo(out) }
+                } ?: error("The source image could not be opened")
+            }
             onProgress?.invoke(0.7f)
 
             val exif = ExifInterface(output)
@@ -61,5 +69,27 @@ object ImageSanitizer {
             output.delete()
             throw error
         }
+    }
+
+    private fun transcodeHeic(context: Context, source: Uri, output: File) {
+        val bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            ImageDecoder.decodeBitmap(ImageDecoder.createSource(context.contentResolver, source)) { decoder, _, _ ->
+                decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+            }
+        } else {
+            context.contentResolver.openInputStream(source)?.use(BitmapFactory::decodeStream)
+                ?: error("HEIC decoding requires device HEIF support")
+        }
+        bitmap.use { image ->
+            output.outputStream().use { stream ->
+                check(image.compress(Bitmap.CompressFormat.JPEG, 95, stream)) { "Could not encode the HEIC image" }
+            }
+        }
+    }
+
+    private inline fun <T> Bitmap.use(block: (Bitmap) -> T): T = try {
+        block(this)
+    } finally {
+        recycle()
     }
 }

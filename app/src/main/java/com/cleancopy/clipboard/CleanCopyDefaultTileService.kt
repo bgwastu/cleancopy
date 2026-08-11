@@ -13,7 +13,7 @@ class CleanCopyDefaultTileService : TileService() {
     override fun onStartListening() {
         super.onStartListening()
         qsTile?.apply {
-            icon = Icon.createWithResource(this@CleanCopyDefaultTileService, com.cleancopy.R.mipmap.ic_launcher)
+            icon = Icon.createWithResource(this@CleanCopyDefaultTileService, com.cleancopy.R.drawable.ic_clean_copy_mark)
             label = getString(com.cleancopy.R.string.tile_cleancopy)
             state = Tile.STATE_INACTIVE
             updateTile()

@@ -4,5 +4,6 @@
     <cache-path name="sanitized" path="sanitized/" />
     <cache-path name="clipboard" path="clipboard/" />
     <cache-path name="clipboard_auto" path="clipboard-auto/" />
+    <cache-path name="clipboard_inputs" path="clipboard-inputs/" />
     <cache-path name="shared" path="shared/" />
 </paths>

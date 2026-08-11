@@ -112,7 +112,7 @@ class CleanMediaActivity : ComponentActivity() {
             window.decorView.post { launchProcessing(listOf(debugSource)) }
         } else if (currentClipboard) {
             pickerLaunched = true
-            window.decorView.post { launchProcessing(resolveInputUris()) }
+            window.decorView.post { launchProcessing(preparedInputUris() ?: resolveInputUris()) }
         } else if (!pickerLaunched) {
             pickerLaunched = true
             window.decorView.post { picker.launch(arrayOf("image/*", "video/*")) }
@@ -136,6 +136,10 @@ class CleanMediaActivity : ComponentActivity() {
             }
         }
     }
+
+    private fun preparedInputUris(): List<Uri>? = intent.getStringArrayListExtra(EXTRA_INPUT_URIS)
+        ?.map(Uri::parse)
+        ?.takeIf { it.isNotEmpty() }
 
     private fun launchProcessing(uris: List<Uri>) {
         if (uris.isEmpty()) {
@@ -172,6 +176,7 @@ class CleanMediaActivity : ComponentActivity() {
                     val filenameOnly = descriptor.outputExtension == "gif"
                     val alreadyClean = !filenameOnly &&
                         !descriptor.requiresMp4Normalization &&
+                        descriptor.sourceMimeType !in setOf("image/heic", "image/heif") &&
                         inspection.fields.isEmpty()
                     progressState = progressState.copy(
                         currentItem = index + 1,
@@ -406,6 +411,7 @@ class CleanMediaActivity : ComponentActivity() {
         const val EXTRA_DEBUG_PATH = "com.cleancopy.extra.CLEAN_DEBUG_PATH"
         const val EXTRA_SAVE_TO_LIBRARY = "com.cleancopy.extra.SAVE_TO_LIBRARY"
         const val EXTRA_CURRENT_CLIPBOARD = "com.cleancopy.extra.CURRENT_CLIPBOARD"
+        const val EXTRA_INPUT_URIS = "com.cleancopy.extra.INPUT_URIS"
         private const val TAG = "CleanCopyCleanMedia"
     }
 }

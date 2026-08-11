@@ -22,7 +22,8 @@ class DebugClipboardActivity : Activity() {
         val clip = clipboard.primaryClip
         val values = clip?.let { (0 until it.itemCount).map { index ->
             val uri = it.getItemAt(index).uri
-            "$uri type=${uri?.let(contentResolver::getType)}"
+            val text = it.getItemAt(index).text
+            "uri=$uri type=${uri?.let(contentResolver::getType)} text=$text"
         } } ?: emptyList()
         Log.i(TAG, "Clipboard items=${values.joinToString()}")
         finish()

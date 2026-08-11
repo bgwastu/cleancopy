@@ -11,6 +11,7 @@
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowIsFloating">false</item>
         <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowDisablePreview">true</item>
         <item name="android:colorAccent">@android:color/transparent</item>
     </style>
 </resources>
