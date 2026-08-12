@@ -8,7 +8,6 @@ import android.os.Build
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import net.wastu.cleancopy.CleanClipboardActivity
-import net.wastu.cleancopy.ClipboardLinkTileAction
 
 class CleanCopyDefaultTileService : TileService() {
     override fun onStartListening() {
@@ -24,7 +23,6 @@ class CleanCopyDefaultTileService : TileService() {
     @SuppressLint("StartActivityAndCollapseDeprecated")
     override fun onClick() {
         super.onClick()
-        if (ClipboardLinkTileAction.start(this)) return
         val intent = Intent(this, CleanClipboardActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {

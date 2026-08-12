@@ -8,30 +8,34 @@
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.CleanCopy">
-        <activity
-            android:name=".ShareReceiverActivity"
-            android:exported="true">
+        <activity android:name=".ShareReceiverActivity" android:exported="false" />
+
+        <activity-alias
+            android:name=".ShareMediaActivity"
+            android:exported="true"
+            android:label="@string/share_clean_media"
+            android:targetActivity=".ShareReceiverActivity">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="image/*" />
-            </intent-filter>
-            <intent-filter>
                 <action android:name="android.intent.action.SEND_MULTIPLE" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="image/*" />
+                <data android:mimeType="video/*" />
             </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".ShareUrlActivity"
+            android:exported="true"
+            android:label="@string/share_clean_url"
+            android:targetActivity=".ShareReceiverActivity">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="video/*" />
+                <data android:mimeType="text/plain" />
+                <data android:mimeType="text/uri-list" />
             </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.SEND_MULTIPLE" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="video/*" />
-            </intent-filter>
-        </activity>
+        </activity-alias>
 
         <activity
             android:name=".MainActivity"
@@ -58,44 +62,12 @@
             android:name=".ClipboardLinkService"
             android:exported="false" />
 
-        <activity
-            android:name=".CleanCopyTilePreferencesActivity"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.service.quicksettings.action.QS_TILE_PREFERENCES" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-        </activity>
-
-        <service
-            android:name=".clipboard.CleanCopyTileService"
-            android:exported="true"
-            android:icon="@drawable/ic_choose_media_copy"
-            android:label="@string/tile_clean_copy"
-            android:settingsActivity="net.wastu.cleancopy.CleanCopyTilePreferencesActivity"
-            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
-            <intent-filter>
-                <action android:name="android.service.quicksettings.action.QS_TILE" />
-            </intent-filter>
-        </service>
-
-        <service
-            android:name=".clipboard.CleanCurrentClipboardTileService"
-            android:exported="true"
-            android:icon="@drawable/ic_clean_current_clipboard"
-            android:label="@string/tile_clean_current"
-            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
-            <intent-filter>
-                <action android:name="android.service.quicksettings.action.QS_TILE" />
-            </intent-filter>
-        </service>
-
         <service
             android:name=".clipboard.CleanCopyDefaultTileService"
             android:exported="true"
             android:icon="@drawable/ic_clean_copy_mark"
             android:label="@string/tile_cleancopy"
-            android:settingsActivity="net.wastu.cleancopy.CleanCopyTilePreferencesActivity"
+            android:settingsActivity=".MainActivity"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
             <intent-filter>
                 <action android:name="android.service.quicksettings.action.QS_TILE" />

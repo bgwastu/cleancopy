@@ -2,10 +2,14 @@ package net.wastu.cleancopy
 
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.os.Build
+import android.app.StatusBarManager
+import android.graphics.drawable.Icon
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -23,19 +27,27 @@ import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
     private var resumeTick by mutableIntStateOf(0)
+    private val openedFromTileSettings by lazy {
+        intent.action == "android.service.quicksettings.action.QS_TILE_PREFERENCES" ||
+            intent.getBooleanExtra(EXTRA_TILE_SETTINGS, false)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         refreshLinkRules()
         setContent {
-            var selectedTab by rememberSaveable { mutableIntStateOf(0) }
+             var selectedTab by rememberSaveable {
+                 mutableIntStateOf(if (openedFromTileSettings) 1 else 0)
+             }
             var rewriteFilename by remember(resumeTick) {
                 mutableStateOf(FilenameRewriteStore.isEnabled(this@MainActivity))
             }
             var compressVideo by remember(resumeTick) {
                 mutableStateOf(VideoCompressionStore.isEnabled(this@MainActivity))
             }
-            var selectedHistoryId by rememberSaveable { mutableStateOf<Long?>(null) }
+             var selectedHistoryId by rememberSaveable {
+                 mutableStateOf(intent.getLongExtra(EXTRA_HISTORY_ID, -1L).takeIf { it >= 0L })
+             }
             var historyEnabled by remember(resumeTick) {
                 mutableStateOf(ClipboardHistoryStore.isEnabled(this@MainActivity))
             }
@@ -60,8 +72,7 @@ class MainActivity : ComponentActivity() {
                     selectedHistory = selectedHistory,
                     linkCleaningEnabled = linkCleaningEnabled,
                     onTabSelected = { selectedTab = it },
-                    onCleanMedia = { openCleanMedia(saveToLibrary = false) },
-                    onCleanCurrentClipboard = { openCleanCurrentClipboard() },
+                     onCleanCurrentClipboard = { openCleanCurrentClipboard() },
                     onSaveMedia = { openCleanMedia(saveToLibrary = true) },
                     onHistorySelected = { selectedHistoryId = it.id },
                     onHistoryBack = { selectedHistoryId = null },
@@ -81,10 +92,11 @@ class MainActivity : ComponentActivity() {
                         compressVideo = it
                         VideoCompressionStore.setEnabled(this@MainActivity, it)
                     },
-                    onLinkCleaningEnabledChanged = {
-                        linkCleaningEnabled = it
-                        LinkCleanupStore.setEnabled(this@MainActivity, it)
-                    }
+                     onLinkCleaningEnabledChanged = {
+                         linkCleaningEnabled = it
+                         LinkCleanupStore.setEnabled(this@MainActivity, it)
+                     },
+                     onAddQuickSettingsTile = { addQuickSettingsTile() }
                 )
             }
         }
@@ -93,6 +105,12 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         resumeTick++
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        recreate()
     }
 
     private fun openCleanMedia(saveToLibrary: Boolean) {
@@ -104,6 +122,28 @@ class MainActivity : ComponentActivity() {
 
     private fun openCleanCurrentClipboard() {
         startActivity(Intent(this, CleanClipboardActivity::class.java))
+    }
+
+    private fun addQuickSettingsTile() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            Toast.makeText(this, "Open Quick Settings, tap the pencil, and add CleanCopy", Toast.LENGTH_LONG).show()
+            return
+        }
+        getSystemService(StatusBarManager::class.java).requestAddTileService(
+            ComponentName(this, "${BuildConfig.APPLICATION_ID}.clipboard.CleanCopyDefaultTileService"),
+            getString(R.string.tile_cleancopy),
+            Icon.createWithResource(this, R.drawable.ic_clean_copy_mark),
+            mainExecutor
+        ) { result ->
+            if (result != StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED) {
+                Toast.makeText(this, "CleanCopy was not added to Quick Settings", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    companion object {
+        const val EXTRA_TILE_SETTINGS = "net.wastu.cleancopy.extra.TILE_SETTINGS"
+        const val EXTRA_HISTORY_ID = "net.wastu.cleancopy.extra.HISTORY_ID"
     }
 
     private fun refreshLinkRules() {

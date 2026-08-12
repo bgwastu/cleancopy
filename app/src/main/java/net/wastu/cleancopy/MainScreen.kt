@@ -36,6 +36,7 @@ import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
 import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -95,7 +96,6 @@ fun CleanCopyApp(
     selectedHistory: ClipboardHistoryEntry?,
     linkCleaningEnabled: Boolean,
     onTabSelected: (Int) -> Unit,
-    onCleanMedia: () -> Unit,
     onCleanCurrentClipboard: () -> Unit,
     onSaveMedia: () -> Unit,
     onHistorySelected: (ClipboardHistoryEntry) -> Unit,
@@ -105,7 +105,8 @@ fun CleanCopyApp(
     onHistoryEnabledChanged: (Boolean) -> Unit,
     onRewriteFilenameChanged: (Boolean) -> Unit,
     onCompressVideoChanged: (Boolean) -> Unit,
-    onLinkCleaningEnabledChanged: (Boolean) -> Unit
+    onLinkCleaningEnabledChanged: (Boolean) -> Unit,
+    onAddQuickSettingsTile: () -> Unit
 ) {
     BackHandler(enabled = selectedHistory != null && selectedTab == 0, onBack = onHistoryBack)
     Scaffold(
@@ -165,7 +166,6 @@ fun CleanCopyApp(
                 ClipboardPage(
                     modifier = Modifier.padding(padding),
                     history = history,
-                    onCleanMedia = onCleanMedia,
                     onCleanCurrentClipboard = onCleanCurrentClipboard,
                     onSaveMedia = onSaveMedia,
                     onHistorySelected = onHistorySelected
@@ -186,7 +186,8 @@ fun CleanCopyApp(
                 onRewriteFilenameChanged = onRewriteFilenameChanged,
                 onCompressVideoChanged = onCompressVideoChanged,
                 onHistoryEnabledChanged = onHistoryEnabledChanged,
-                onLinkCleaningEnabledChanged = onLinkCleaningEnabledChanged
+                 onLinkCleaningEnabledChanged = onLinkCleaningEnabledChanged,
+                 onAddQuickSettingsTile = onAddQuickSettingsTile
             )
         }
     }
@@ -196,7 +197,6 @@ fun CleanCopyApp(
 private fun ClipboardPage(
     modifier: Modifier,
     history: List<ClipboardHistoryEntry>,
-    onCleanMedia: () -> Unit,
     onCleanCurrentClipboard: () -> Unit,
     onSaveMedia: () -> Unit,
     onHistorySelected: (ClipboardHistoryEntry) -> Unit
@@ -236,14 +236,9 @@ private fun ClipboardPage(
                     modifier = Modifier.fillMaxWidth()
                 )
                 Button(onClick = onCleanCurrentClipboard, modifier = Modifier.fillMaxWidth()) {
-                    Icon(painterResource(R.drawable.ic_clean_current_clipboard), contentDescription = null)
+                    Icon(painterResource(R.drawable.ic_clean_copy_mark), contentDescription = null)
                     Spacer(Modifier.width(8.dp))
                     Text("Clean current clipboard")
-                }
-                Button(onClick = onCleanMedia, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Outlined.ContentCopy, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Choose media & copy")
                 }
                 Button(onClick = onSaveMedia, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Outlined.Save, contentDescription = null)
@@ -534,7 +529,8 @@ private fun SettingsPage(
     onRewriteFilenameChanged: (Boolean) -> Unit,
     onCompressVideoChanged: (Boolean) -> Unit,
     onHistoryEnabledChanged: (Boolean) -> Unit,
-    onLinkCleaningEnabledChanged: (Boolean) -> Unit
+    onLinkCleaningEnabledChanged: (Boolean) -> Unit,
+    onAddQuickSettingsTile: () -> Unit
 ) {
     Column(
         modifier = modifier
@@ -558,6 +554,37 @@ private fun SettingsPage(
             checked = compressVideo,
             onCheckedChange = onCompressVideoChanged
         )
+
+        Text("Quick Settings", style = MaterialTheme.typography.headlineSmall)
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        painterResource(R.drawable.ic_clean_copy_mark),
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(28.dp)
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Text("CleanCopy", style = MaterialTheme.typography.titleMedium)
+                }
+                Text(
+                    "Clean the image, video, or link currently in your clipboard without opening the app.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Text(
+                    "You can move or remove this tile from the system Quick Settings editor.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Button(onClick = onAddQuickSettingsTile, modifier = Modifier.fillMaxWidth()) {
+                    Text("Add to Quick Settings")
+                }
+            }
+        }
 
         Text("History", style = MaterialTheme.typography.headlineSmall)
         SettingSwitch(

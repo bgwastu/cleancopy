@@ -59,10 +59,11 @@ object ImageSanitizer {
             }
             onProgress?.invoke(0.7f)
 
+            val motionPhoto = MotionPhotoDetector.isMotionPhoto(context, source)
             val exif = ExifInterface(output)
             removableTags.forEach { tag -> runCatching { exif.setAttribute(tag, null) } }
             exif.saveAttributes()
-            if (extension == "jpg") JpegMetadataScrubber.scrubXmp(output)
+            if (extension == "jpg" && !motionPhoto) JpegMetadataScrubber.scrubXmp(output)
             onProgress?.invoke(1f)
             SanitizedImage(output, descriptor.mimeType)
         } catch (error: Throwable) {

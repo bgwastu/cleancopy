@@ -1,95 +1,88 @@
 package net.wastu.cleancopy
 
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
-import androidx.core.content.FileProvider
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
 
 class ShareReceiverActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val uris = incomingUris(intent)
-        if (uris.isEmpty()) {
+        if (uris.isNotEmpty()) {
+            openMedia(uris)
+            return
+        }
+        val text = incomingText(intent)
+        if (text.isNotBlank() && LinkSanitizer.containsLink(text)) {
+            cleanLink(text)
+            return
+        }
+        if (text.isNotBlank() || uris.isEmpty()) {
             finish()
             return
         }
+    }
 
+    private fun openMedia(uris: List<Uri>) {
+        val cleanIntent = Intent(this, CleanMediaActivity::class.java)
+                .putExtra(CleanMediaActivity.EXTRA_SAVE_TO_LIBRARY, true)
+                .putExtra(CleanMediaActivity.EXTRA_COPY_TO_CLIPBOARD, true)
+                .putStringArrayListExtra(CleanMediaActivity.EXTRA_INPUT_URIS, ArrayList(uris.map(Uri::toString)))
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        cleanIntent.clipData = intent.clipData
+        startActivity(cleanIntent)
+        finish()
+    }
+
+    private fun cleanLink(text: String) {
         lifecycleScope.launch {
-            val result = runCatching {
-                withContext(Dispatchers.IO) {
-                    val sessionDirectory = File(cacheDir, "shared/${System.currentTimeMillis()}")
-                    uris.mapIndexed { index, source ->
-                        val before = ClipboardMetadataReader.inspect(this@ShareReceiverActivity, source)
-                        val filenameOnly = MediaTypeDetector.detect(this@ShareReceiverActivity, source)
-                            .outputExtension == "gif"
-                        if (before.fields.isEmpty() && !filenameOnly) {
-                            PreparedMedia(source, before, before, wasSanitized = false)
-                        } else {
-                            val output = MediaSanitizer.sanitize(
-                                context = this@ShareReceiverActivity,
-                                source = source,
-                                sessionDirectory = sessionDirectory,
-                                itemIndex = index
-                            ) { }
-                            val cleanUri = FileProvider.getUriForFile(
-                                this@ShareReceiverActivity,
-                                "${BuildConfig.APPLICATION_ID}.fileprovider",
-                                output.file
-                            )
-                            val after = ClipboardMetadataReader.inspect(this@ShareReceiverActivity, cleanUri)
-                            PreparedMedia(cleanUri, before, after, wasSanitized = !filenameOnly)
-                        }
-                    }
-                }
-            }
-            result.onSuccess { prepared ->
-                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                val clip = ClipData.newUri(
-                    contentResolver,
-                    "CleanCopy clean media",
-                    prepared.first().uri
+            val result = withContext(Dispatchers.IO) {
+                LinkSanitizer.cleanText(
+                    text,
+                    LinkRuleStore.providers(this@ShareReceiverActivity),
+                    removeReferrals = false,
+                    resolver = NetworkRedirectResolver::resolve
                 )
-                prepared.drop(1).forEach { clip.addItem(ClipData.Item(it.uri)) }
-                clipboard.setPrimaryClip(clip)
-                prepared.filter { it.wasSanitized }.forEach { media ->
-                    ClipboardHistoryStore.record(
-                        this@ShareReceiverActivity,
-                        ClipboardHistoryEntry(
-                            id = System.currentTimeMillis(),
-                            clipboardUri = media.uri.toString(),
-                            sourceName = media.before.displayName,
-                            kind = media.before.kind,
-                            capturedAt = System.currentTimeMillis(),
-                            before = media.before.fields,
-                            after = media.after.fields
-                        )
-                    )
-                }
-                Toast.makeText(
-                    this@ShareReceiverActivity,
-                    "Clean media copied to clipboard",
-                    Toast.LENGTH_SHORT
-                ).show()
-            }.onFailure { error ->
-                Toast.makeText(
-                    this@ShareReceiverActivity,
-                    error.message ?: "Could not clean this media",
-                    Toast.LENGTH_LONG
-                ).show()
+            }
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("CleanCopy clean URL", result.text))
+            if (result.links.any { it.changed }) {
+                val entry = ClipboardHistoryEntry(
+                    id = System.currentTimeMillis(),
+                    clipboardUri = result.text,
+                    sourceName = "Cleaned links",
+                    kind = MediaKind.LINK,
+                    capturedAt = System.currentTimeMillis(),
+                    before = result.links.map { MetadataField("Original link", it.original) },
+                    after = result.links.map { MetadataField("Clean link", it.cleaned) }
+                )
+                ClipboardHistoryStore.record(this@ShareReceiverActivity, entry)
+                openHistory(entry.id)
+            } else {
+                Toast.makeText(this@ShareReceiverActivity, "No tracking found in copied links", Toast.LENGTH_SHORT).show()
             }
             finish()
         }
     }
+
+    private fun openHistory(id: Long) {
+        startActivity(
+            Intent(this, MainActivity::class.java)
+                .putExtra(MainActivity.EXTRA_HISTORY_ID, id)
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        )
+    }
+
+    private fun incomingText(intent: Intent): String = if (intent.action == Intent.ACTION_SEND) {
+        intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString().orEmpty()
+    } else ""
 
     private fun incomingUris(intent: Intent): List<Uri> = when (intent.action) {
         Intent.ACTION_SEND -> listOfNotNull(
@@ -106,10 +99,4 @@ class ShareReceiverActivity : ComponentActivity() {
         else -> emptyList()
     }
 
-    private data class PreparedMedia(
-        val uri: Uri,
-        val before: MediaInspection,
-        val after: MediaInspection,
-        val wasSanitized: Boolean
-    )
 }

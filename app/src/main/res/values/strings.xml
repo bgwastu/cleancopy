@@ -1,6 +1,6 @@
 <resources>
     <string name="app_name">CleanCopy</string>
-    <string name="tile_clean_copy">Choose Media &amp; Copy</string>
-    <string name="tile_clean_current">Clean Current Clipboard</string>
     <string name="tile_cleancopy">CleanCopy</string>
+    <string name="share_clean_media">Clean Media &amp; Copy</string>
+    <string name="share_clean_url">Clean URL &amp; Copy</string>
 </resources>

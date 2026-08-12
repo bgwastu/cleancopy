@@ -29,12 +29,14 @@ class CleanClipboardActivity : ComponentActivity() {
     private fun processClipboard(attempt: Int = 0) {
         if (started) return
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val clip = clipboard.primaryClip
+        val clip = runCatching {
+            if (clipboard.hasPrimaryClip()) clipboard.primaryClip else null
+        }.getOrNull()
         if (clip == null) {
             if (attempt < CLIPBOARD_READ_RETRIES) {
                 window.decorView.postDelayed({ processClipboard(attempt + 1) }, CLIPBOARD_RETRY_DELAY_MS)
             } else {
-                finishWithToast("The clipboard is empty")
+                finishWithToast("Could not read the current clipboard", Toast.LENGTH_LONG)
             }
             return
         }
@@ -52,7 +54,13 @@ class CleanClipboardActivity : ComponentActivity() {
                     )
                 }
                 clipboard.setPrimaryClip(ClipData.newPlainText("CleanCopy clean links", result.text))
-                recordCleanedLinks(this@CleanClipboardActivity, result)
+                recordCleanedLinks(this@CleanClipboardActivity, result)?.let { entry ->
+                    startActivity(
+                        Intent(this@CleanClipboardActivity, MainActivity::class.java)
+                            .putExtra(MainActivity.EXTRA_HISTORY_ID, entry.id)
+                            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                    )
+                }
                 val count = result.links.count { it.changed }
                 finishWithToast(
                     if (count == 0) "No tracking found in copied links" else "$count link(s) cleaned and copied"
@@ -157,23 +165,22 @@ class CleanClipboardActivity : ComponentActivity() {
     }
 
     private companion object {
-        const val CLIPBOARD_READ_RETRIES = 5
-        const val CLIPBOARD_RETRY_DELAY_MS = 100L
+        const val CLIPBOARD_READ_RETRIES = 10
+        const val CLIPBOARD_RETRY_DELAY_MS = 150L
     }
 }
 
-fun recordCleanedLinks(context: Context, result: LinkBatchResult) {
-    if (result.links.none { it.changed }) return
-    ClipboardHistoryStore.record(
-        context,
-        ClipboardHistoryEntry(
-            id = System.currentTimeMillis(),
-            clipboardUri = result.text,
-            sourceName = "Cleaned links",
-            kind = MediaKind.LINK,
-            capturedAt = System.currentTimeMillis(),
-            before = result.links.map { MetadataField("Original link", it.original) },
-            after = result.links.map { MetadataField("Clean link", it.cleaned) }
-        )
-    )
+fun recordCleanedLinks(context: Context, result: LinkBatchResult): ClipboardHistoryEntry? {
+    if (result.links.none { it.changed }) return null
+    return ClipboardHistoryEntry(
+        id = System.currentTimeMillis(),
+        clipboardUri = result.text,
+        sourceName = "Cleaned links",
+        kind = MediaKind.LINK,
+        capturedAt = System.currentTimeMillis(),
+        before = result.links.map { MetadataField("Original link", it.original) },
+        after = result.links.map { MetadataField("Clean link", it.cleaned) }
+    ).also { entry ->
+        ClipboardHistoryStore.record(context, entry)
+    }
 }

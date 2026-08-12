@@ -55,6 +55,9 @@ class CleanMediaActivity : ComponentActivity() {
     private val currentClipboard by lazy {
         intent.getBooleanExtra(EXTRA_CURRENT_CLIPBOARD, false)
     }
+    private val copyToClipboardAfterSave by lazy {
+        intent.getBooleanExtra(EXTRA_COPY_TO_CLIPBOARD, false)
+    }
     private var destinationTreeUri: Uri? = null
     private var pendingUris: List<Uri> = emptyList()
     private var clipboardMimeType: String? = null
@@ -115,7 +118,19 @@ class CleanMediaActivity : ComponentActivity() {
             window.decorView.post { launchProcessing(preparedInputUris() ?: resolveInputUris()) }
         } else if (!pickerLaunched) {
             pickerLaunched = true
-            window.decorView.post { picker.launch(arrayOf("image/*", "video/*")) }
+            val inputUris = preparedInputUris()
+            if (inputUris != null) {
+                window.decorView.post {
+                    if (saveToLibrary) {
+                        pendingUris = inputUris
+                        destinationPicker.launch(null)
+                    } else {
+                        launchProcessing(inputUris)
+                    }
+                }
+            } else {
+                window.decorView.post { picker.launch(arrayOf("image/*", "video/*")) }
+            }
         }
     }
 
@@ -258,23 +273,32 @@ class CleanMediaActivity : ComponentActivity() {
                     prepared
                 }
 
-                if (!saveToLibrary && (currentClipboard || finalMedia.size == 1)) {
+                if (copyToClipboardAfterSave || (!saveToLibrary && (currentClipboard || finalMedia.size == 1))) {
                     copyToClipboard(finalMedia.map { it.uri })
                 } else if (!saveToLibrary) {
                     shareMedia(finalMedia.map { it.uri })
                 }
-                finalMedia.filter { it.wasSanitized }.forEach { media ->
-                    ClipboardHistoryStore.record(
-                        this@CleanMediaActivity,
-                        ClipboardHistoryEntry(
-                            id = System.currentTimeMillis(),
-                            clipboardUri = media.uri.toString(),
-                            sourceName = media.before.displayName,
-                            kind = media.kind,
-                            capturedAt = System.currentTimeMillis(),
-                            before = media.before.fields,
-                            after = media.after.fields
-                        )
+                val historyEntries = finalMedia.filter {
+                    it.wasSanitized || saveToLibrary || currentClipboard
+                }.map { media ->
+                    ClipboardHistoryEntry(
+                        id = System.currentTimeMillis(),
+                        clipboardUri = media.uri.toString(),
+                        sourceName = media.before.displayName,
+                        kind = media.kind,
+                        capturedAt = System.currentTimeMillis(),
+                        before = media.before.fields,
+                        after = media.after.fields
+                    )
+                }
+                historyEntries.forEach { entry ->
+                    ClipboardHistoryStore.record(this@CleanMediaActivity, entry)
+                }
+                historyEntries.firstOrNull()?.let { entry ->
+                    startActivity(
+                        Intent(this@CleanMediaActivity, MainActivity::class.java)
+                            .putExtra(MainActivity.EXTRA_HISTORY_ID, entry.id)
+                            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                     )
                 }
 
@@ -420,6 +444,7 @@ class CleanMediaActivity : ComponentActivity() {
         const val EXTRA_SAVE_TO_LIBRARY = "net.wastu.cleancopy.extra.SAVE_TO_LIBRARY"
         const val EXTRA_CURRENT_CLIPBOARD = "net.wastu.cleancopy.extra.CURRENT_CLIPBOARD"
         const val EXTRA_INPUT_URIS = "net.wastu.cleancopy.extra.INPUT_URIS"
+        const val EXTRA_COPY_TO_CLIPBOARD = "net.wastu.cleancopy.extra.COPY_TO_CLIPBOARD"
         private const val TAG = "CleanCopyCleanMedia"
     }
 }
