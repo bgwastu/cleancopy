@@ -547,13 +547,10 @@ private fun SettingsPage(
         SettingSwitch(
             icon = Icons.Outlined.ContentCopy,
             title = "Rewrite filename",
-            supporting = "Use a clean name for derived media",
+            supporting = "Saved as {counter}.{ext}; the first file is 0.ext",
             checked = rewriteFilename,
             onCheckedChange = onRewriteFilenameChanged
         )
-        if (rewriteFilename) {
-            Text("Saved as {counter}.{ext}; the first file is 0.ext")
-        }
         SettingSwitch(
             icon = Icons.Outlined.Movie,
             title = "Compress videos",
