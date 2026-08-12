@@ -44,7 +44,6 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -92,7 +91,6 @@ fun CleanCopyApp(
     history: List<ClipboardHistoryEntry>,
     historyEnabled: Boolean,
     rewriteFilename: Boolean,
-    outputName: String,
     compressVideo: Boolean,
     selectedHistory: ClipboardHistoryEntry?,
     linkCleaningEnabled: Boolean,
@@ -106,7 +104,6 @@ fun CleanCopyApp(
     onCopyHistoryMedia: (ClipboardHistoryEntry) -> Unit,
     onHistoryEnabledChanged: (Boolean) -> Unit,
     onRewriteFilenameChanged: (Boolean) -> Unit,
-    onOutputNameChanged: (String) -> Unit,
     onCompressVideoChanged: (Boolean) -> Unit,
     onLinkCleaningEnabledChanged: (Boolean) -> Unit
 ) {
@@ -183,12 +180,10 @@ fun CleanCopyApp(
             SettingsPage(
                 modifier = Modifier.padding(padding),
                 rewriteFilename = rewriteFilename,
-                outputName = outputName,
                 compressVideo = compressVideo,
                 historyEnabled = historyEnabled,
                 linkCleaningEnabled = linkCleaningEnabled,
                 onRewriteFilenameChanged = onRewriteFilenameChanged,
-                onOutputNameChanged = onOutputNameChanged,
                 onCompressVideoChanged = onCompressVideoChanged,
                 onHistoryEnabledChanged = onHistoryEnabledChanged,
                 onLinkCleaningEnabledChanged = onLinkCleaningEnabledChanged
@@ -533,12 +528,10 @@ private fun historyStatus(entry: ClipboardHistoryEntry): String {
 private fun SettingsPage(
     modifier: Modifier,
     rewriteFilename: Boolean,
-    outputName: String,
     compressVideo: Boolean,
     historyEnabled: Boolean,
     linkCleaningEnabled: Boolean,
     onRewriteFilenameChanged: (Boolean) -> Unit,
-    onOutputNameChanged: (String) -> Unit,
     onCompressVideoChanged: (Boolean) -> Unit,
     onHistoryEnabledChanged: (Boolean) -> Unit,
     onLinkCleaningEnabledChanged: (Boolean) -> Unit
@@ -559,14 +552,7 @@ private fun SettingsPage(
             onCheckedChange = onRewriteFilenameChanged
         )
         if (rewriteFilename) {
-            OutlinedTextField(
-                value = outputName,
-                onValueChange = onOutputNameChanged,
-                label = { Text("Filename") },
-                supportingText = { Text("Saved as $outputName.{ext}") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
+            Text("Saved as {counter}.{ext}; the first file is 0.ext")
         }
         SettingSwitch(
             icon = Icons.Outlined.Movie,

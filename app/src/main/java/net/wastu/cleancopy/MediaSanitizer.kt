@@ -12,7 +12,7 @@ object MediaSanitizer {
         source: Uri,
         sessionDirectory: File,
         itemIndex: Int,
-        outputBaseName: String = OutputNameStore.resolve(context, source),
+        outputBaseName: String = OutputNameStore.resolve(context, source, itemIndex),
         compressVideo: Boolean = VideoCompressionStore.isEnabled(context),
         onProgress: suspend (Float) -> Unit
     ): SanitizedMedia {

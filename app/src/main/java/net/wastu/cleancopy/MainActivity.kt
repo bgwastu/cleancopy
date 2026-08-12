@@ -32,9 +32,6 @@ class MainActivity : ComponentActivity() {
             var rewriteFilename by remember(resumeTick) {
                 mutableStateOf(FilenameRewriteStore.isEnabled(this@MainActivity))
             }
-            var outputName by remember(resumeTick) {
-                mutableStateOf(OutputNameStore.get(this@MainActivity))
-            }
             var compressVideo by remember(resumeTick) {
                 mutableStateOf(VideoCompressionStore.isEnabled(this@MainActivity))
             }
@@ -59,7 +56,6 @@ class MainActivity : ComponentActivity() {
                     history = history,
                     historyEnabled = historyEnabled,
                     rewriteFilename = rewriteFilename,
-                    outputName = outputName,
                     compressVideo = compressVideo,
                     selectedHistory = selectedHistory,
                     linkCleaningEnabled = linkCleaningEnabled,
@@ -80,10 +76,6 @@ class MainActivity : ComponentActivity() {
                     onRewriteFilenameChanged = {
                         rewriteFilename = it
                         FilenameRewriteStore.setEnabled(this@MainActivity, it)
-                    },
-                    onOutputNameChanged = {
-                        outputName = OutputNameStore.normalize(it)
-                        OutputNameStore.set(this@MainActivity, outputName)
                     },
                     onCompressVideoChanged = {
                         compressVideo = it

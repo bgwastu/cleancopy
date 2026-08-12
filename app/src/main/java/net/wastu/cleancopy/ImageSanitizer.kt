@@ -39,7 +39,7 @@ object ImageSanitizer {
         context: Context,
         source: Uri,
         outputFile: File? = null,
-        outputBaseName: String = OutputNameStore.get(context),
+        outputBaseName: String = "0",
         onProgress: ((Float) -> Unit)? = null
     ): Result<SanitizedImage> = runCatching {
         val descriptor = MediaTypeDetector.detect(context, source)
