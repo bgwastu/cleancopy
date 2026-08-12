@@ -52,7 +52,9 @@ class ShareReceiverActivity : ComponentActivity() {
                 )
             }
             val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("CleanCopy clean URL", result.text))
+            if (result.text != text) {
+                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("CleanCopy clean URL", result.text))
+            }
             if (result.links.any { it.changed }) {
                 val entry = ClipboardHistoryEntry(
                     id = System.currentTimeMillis(),

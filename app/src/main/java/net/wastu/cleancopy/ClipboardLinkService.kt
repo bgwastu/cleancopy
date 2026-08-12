@@ -54,7 +54,9 @@ class ClipboardLinkService : Service() {
                 )
                 withContext(Dispatchers.Main) {
                     val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                    clipboard.setPrimaryClip(ClipData.newPlainText("CleanCopy clean links", result.text))
+                    if (result.text != input) {
+                        clipboard.setPrimaryClip(ClipData.newPlainText("CleanCopy clean links", result.text))
+                    }
                     recordCleanedLinks(this@ClipboardLinkService, result)
                 }
             } finally {

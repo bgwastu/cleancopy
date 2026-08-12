@@ -53,7 +53,9 @@ class CleanClipboardActivity : ComponentActivity() {
                         resolver = NetworkRedirectResolver::resolve
                     )
                 }
-                clipboard.setPrimaryClip(ClipData.newPlainText("CleanCopy clean links", result.text))
+                if (result.text != text) {
+                    clipboard.setPrimaryClip(ClipData.newPlainText("CleanCopy clean links", result.text))
+                }
                 recordCleanedLinks(this@CleanClipboardActivity, result)?.let { entry ->
                     startActivity(
                         Intent(this@CleanClipboardActivity, MainActivity::class.java)
