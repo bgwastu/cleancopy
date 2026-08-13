@@ -73,7 +73,8 @@ class MainActivity : ComponentActivity() {
                     linkCleaningEnabled = linkCleaningEnabled,
                     onTabSelected = { selectedTab = it },
                      onCleanCurrentClipboard = { openCleanCurrentClipboard() },
-                    onSaveMedia = { openCleanMedia(saveToLibrary = true) },
+                     onCopyMedia = { openCleanMedia(outputMode = CleanMediaActivity.OUTPUT_COPY) },
+                     onSaveMedia = { openCleanMedia(outputMode = CleanMediaActivity.OUTPUT_SAVE) },
                     onHistorySelected = { selectedHistoryId = it.id },
                     onHistoryBack = { selectedHistoryId = null },
                     onOpenHistoryMedia = { openHistoryMedia(it) },
@@ -113,10 +114,11 @@ class MainActivity : ComponentActivity() {
         recreate()
     }
 
-    private fun openCleanMedia(saveToLibrary: Boolean) {
+    private fun openCleanMedia(outputMode: String) {
         startActivity(
             Intent(this, CleanMediaActivity::class.java)
-                .putExtra(CleanMediaActivity.EXTRA_SAVE_TO_LIBRARY, saveToLibrary)
+                .putExtra(CleanMediaActivity.EXTRA_SAVE_TO_LIBRARY, outputMode == CleanMediaActivity.OUTPUT_SAVE)
+                .putExtra(CleanMediaActivity.EXTRA_OUTPUT_MODE, outputMode)
         )
     }
 

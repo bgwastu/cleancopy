@@ -97,6 +97,7 @@ fun CleanCopyApp(
     linkCleaningEnabled: Boolean,
     onTabSelected: (Int) -> Unit,
     onCleanCurrentClipboard: () -> Unit,
+    onCopyMedia: () -> Unit,
     onSaveMedia: () -> Unit,
     onHistorySelected: (ClipboardHistoryEntry) -> Unit,
     onHistoryBack: () -> Unit,
@@ -166,7 +167,8 @@ fun CleanCopyApp(
                 ClipboardPage(
                     modifier = Modifier.padding(padding),
                     history = history,
-                    onCleanCurrentClipboard = onCleanCurrentClipboard,
+                     onCleanCurrentClipboard = onCleanCurrentClipboard,
+                    onCopyMedia = onCopyMedia,
                     onSaveMedia = onSaveMedia,
                     onHistorySelected = onHistorySelected
                 )
@@ -198,6 +200,7 @@ private fun ClipboardPage(
     modifier: Modifier,
     history: List<ClipboardHistoryEntry>,
     onCleanCurrentClipboard: () -> Unit,
+    onCopyMedia: () -> Unit,
     onSaveMedia: () -> Unit,
     onHistorySelected: (ClipboardHistoryEntry) -> Unit
 ) {
@@ -239,6 +242,11 @@ private fun ClipboardPage(
                     Icon(painterResource(R.drawable.ic_clean_copy_mark), contentDescription = null)
                     Spacer(Modifier.width(8.dp))
                     Text("Clean current clipboard")
+                }
+                Button(onClick = onCopyMedia, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Outlined.ContentCopy, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Choose media & copy")
                 }
                 Button(onClick = onSaveMedia, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Outlined.Save, contentDescription = null)

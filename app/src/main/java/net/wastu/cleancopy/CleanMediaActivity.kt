@@ -56,7 +56,7 @@ class CleanMediaActivity : ComponentActivity() {
         intent.getBooleanExtra(EXTRA_CURRENT_CLIPBOARD, false)
     }
     private val copyToClipboardAfterSave by lazy {
-        intent.getBooleanExtra(EXTRA_COPY_TO_CLIPBOARD, false)
+        intent.getStringExtra(EXTRA_OUTPUT_MODE) == OUTPUT_COPY
     }
     private var destinationTreeUri: Uri? = null
     private var pendingUris: List<Uri> = emptyList()
@@ -444,7 +444,9 @@ class CleanMediaActivity : ComponentActivity() {
         const val EXTRA_SAVE_TO_LIBRARY = "net.wastu.cleancopy.extra.SAVE_TO_LIBRARY"
         const val EXTRA_CURRENT_CLIPBOARD = "net.wastu.cleancopy.extra.CURRENT_CLIPBOARD"
         const val EXTRA_INPUT_URIS = "net.wastu.cleancopy.extra.INPUT_URIS"
-        const val EXTRA_COPY_TO_CLIPBOARD = "net.wastu.cleancopy.extra.COPY_TO_CLIPBOARD"
+        const val EXTRA_OUTPUT_MODE = "net.wastu.cleancopy.extra.OUTPUT_MODE"
+        const val OUTPUT_COPY = "copy"
+        const val OUTPUT_SAVE = "save"
         private const val TAG = "CleanCopyCleanMedia"
     }
 }
