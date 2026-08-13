@@ -61,6 +61,7 @@ class CleanMediaActivity : ComponentActivity() {
     private var destinationTreeUri: Uri? = null
     private var pendingUris: List<Uri> = emptyList()
     private var clipboardMimeType: String? = null
+    private var progressToast: Toast? = null
 
     private val picker = registerForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments()
@@ -102,6 +103,9 @@ class CleanMediaActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (intent.getBooleanExtra(EXTRA_PROGRESS_TOAST, false)) {
+            showProgressToast("Processing (20%)...")
+        }
         val debugPath = if (BuildConfig.DEBUG) intent.getStringExtra(EXTRA_DEBUG_PATH) else null
         val debugSource = debugPath?.let(::copyDebugSource)
         setContent {
@@ -180,6 +184,7 @@ class CleanMediaActivity : ComponentActivity() {
             totalItems = uris.size,
             status = "Preparing clean copies..."
         )
+        showProgressToast("Processing (20%)...")
         val sessionDirectory = File(cacheDir, "clipboard/${System.currentTimeMillis()}")
 
         processingJob = lifecycleScope.launch {
@@ -236,6 +241,7 @@ class CleanMediaActivity : ComponentActivity() {
                                     progress = ((index + itemProgress) / inputUris.size)
                                         .coerceIn(0f, 1f)
                                 )
+                                showProgressToast("Processing (${(progressState.progress * 100).toInt()}%)...")
                             }
                         }
                         val cleanUri = outputUri(output)
@@ -255,6 +261,7 @@ class CleanMediaActivity : ComponentActivity() {
                 }
 
                 val finalMedia = if (saveToLibrary) {
+                    showProgressToast("Processing (90%)...")
                     val treeUri = destinationTreeUri ?: error("No save destination selected")
                     prepared.map { media ->
                         media.copy(
@@ -272,6 +279,8 @@ class CleanMediaActivity : ComponentActivity() {
                 } else {
                     prepared
                 }
+
+                showProgressToast("Processing (95%)...")
 
                 if (copyToClipboardAfterSave || (!saveToLibrary && (currentClipboard || finalMedia.size == 1))) {
                     copyToClipboard(finalMedia.map { it.uri })
@@ -312,6 +321,7 @@ class CleanMediaActivity : ComponentActivity() {
                 } else {
                     ""
                 }
+                progressToast?.cancel()
                 Toast.makeText(
                     this@CleanMediaActivity,
                     "${finalMedia.size} media item${if (finalMedia.size == 1) "" else "s"} $action$skippedMessage",
@@ -321,11 +331,13 @@ class CleanMediaActivity : ComponentActivity() {
             } catch (_: CancellationException) {
                 Log.i(TAG, "Cleaning canceled")
                 sessionDirectory.deleteRecursively()
+                progressToast?.cancel()
                 Toast.makeText(this@CleanMediaActivity, "Cleaning canceled", Toast.LENGTH_SHORT).show()
                 finish()
             } catch (error: Throwable) {
                 Log.e(TAG, "Could not clean selected media", error)
                 sessionDirectory.deleteRecursively()
+                progressToast?.cancel()
                 Toast.makeText(
                     this@CleanMediaActivity,
                     error.message ?: "Could not clean the selected media",
@@ -431,6 +443,14 @@ class CleanMediaActivity : ComponentActivity() {
         if (progressState.isProcessing) processingJob?.cancel() else finish()
     }
 
+    private fun showProgressToast(message: String) {
+        (progressToast ?: Toast.makeText(this, message, Toast.LENGTH_SHORT).also { progressToast = it })
+            .apply {
+                setText(message)
+                show()
+            }
+    }
+
     private fun copyDebugSource(path: String): Uri? = runCatching {
         val source = File(path).takeIf(File::isFile) ?: return@runCatching null
         val extension = source.name.substringAfterLast('.', "bin")
@@ -445,6 +465,7 @@ class CleanMediaActivity : ComponentActivity() {
         const val EXTRA_CURRENT_CLIPBOARD = "net.wastu.cleancopy.extra.CURRENT_CLIPBOARD"
         const val EXTRA_INPUT_URIS = "net.wastu.cleancopy.extra.INPUT_URIS"
         const val EXTRA_OUTPUT_MODE = "net.wastu.cleancopy.extra.OUTPUT_MODE"
+        const val EXTRA_PROGRESS_TOAST = "net.wastu.cleancopy.extra.PROGRESS_TOAST"
         const val OUTPUT_COPY = "copy"
         const val OUTPUT_SAVE = "save"
         private const val TAG = "CleanCopyCleanMedia"

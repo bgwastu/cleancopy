@@ -20,9 +20,11 @@ import java.util.Locale
 /** Reads and snapshots clipboard content while this foreground activity owns its URI grants. */
 class CleanClipboardActivity : ComponentActivity() {
     private var started = false
+    private var progressToast: Toast? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        showProgress("Processing (0%)...")
         window.decorView.post { processClipboard() }
     }
 
@@ -34,6 +36,7 @@ class CleanClipboardActivity : ComponentActivity() {
         }.getOrNull()
         if (clip == null) {
             if (attempt < CLIPBOARD_READ_RETRIES) {
+                showProgress("Processing (5%)...")
                 window.decorView.postDelayed({ processClipboard(attempt + 1) }, CLIPBOARD_RETRY_DELAY_MS)
             } else {
                 finishWithToast("Could not read the current clipboard", Toast.LENGTH_LONG)
@@ -41,9 +44,11 @@ class CleanClipboardActivity : ComponentActivity() {
             return
         }
         started = true
+        showProgress("Processing (10%)...")
 
         val text = clip.webText()
         if (LinkCleanupStore.isEnabled(this) && LinkSanitizer.containsLink(text)) {
+            showProgress("Processing (25%)...")
             lifecycleScope.launch {
                 val result = withContext(Dispatchers.IO) {
                     LinkSanitizer.cleanText(
@@ -53,6 +58,7 @@ class CleanClipboardActivity : ComponentActivity() {
                         resolver = NetworkRedirectResolver::resolve
                     )
                 }
+                showProgress("Processing (80%)...")
                 if (result.text != text) {
                     clipboard.setPrimaryClip(ClipData.newPlainText("CleanCopy clean links", result.text))
                 }
@@ -72,6 +78,7 @@ class CleanClipboardActivity : ComponentActivity() {
         }
 
         lifecycleScope.launch {
+            showProgress("Processing (20%)...")
             val snapshots = runCatching {
                 withContext(Dispatchers.IO) { snapshotMedia(clip.mediaUris()) }
             }
@@ -83,6 +90,7 @@ class CleanClipboardActivity : ComponentActivity() {
                         Intent(this@CleanClipboardActivity, CleanMediaActivity::class.java)
                             .putExtra(CleanMediaActivity.EXTRA_SAVE_TO_LIBRARY, false)
                             .putExtra(CleanMediaActivity.EXTRA_CURRENT_CLIPBOARD, true)
+                            .putExtra(CleanMediaActivity.EXTRA_PROGRESS_TOAST, true)
                             .putStringArrayListExtra(
                                 CleanMediaActivity.EXTRA_INPUT_URIS,
                                 ArrayList(uris.map(Uri::toString))
@@ -162,8 +170,17 @@ class CleanClipboardActivity : ComponentActivity() {
     }
 
     private fun finishWithToast(message: String, duration: Int = Toast.LENGTH_SHORT) {
+        progressToast?.cancel()
         Toast.makeText(this, message, duration).show()
         finish()
+    }
+
+    private fun showProgress(message: String) {
+        (progressToast ?: Toast.makeText(this, message, Toast.LENGTH_SHORT).also { progressToast = it })
+            .apply {
+                setText(message)
+                show()
+            }
     }
 
     private companion object {
