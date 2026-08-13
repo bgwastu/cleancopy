@@ -2,7 +2,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 val gitVersionName = providers.exec {
     commandLine("git", "describe", "--tags", "--always", "--dirty")
-}.standardOutput.asText.map { "1.1.0-${it.trim().removePrefix("v")}" }
+}.standardOutput.asText.map { "1.1.1-${it.trim().removePrefix("v")}" }
 
 val gitVersionCode = providers.exec {
     commandLine("git", "rev-list", "--count", "HEAD")
