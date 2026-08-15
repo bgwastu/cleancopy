@@ -11,7 +11,6 @@ import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -49,6 +48,9 @@ class CleanMediaActivity : ComponentActivity() {
     private var pickerLaunched = false
     private var processingJob: Job? = null
     private var progressState by mutableStateOf(ProcessingState())
+    private var completionData by mutableStateOf<CleanResultData?>(null)
+    private var cleanedUris: List<Uri> = emptyList()
+
     private val saveToLibrary by lazy {
         intent.getBooleanExtra(EXTRA_SAVE_TO_LIBRARY, false)
     }
@@ -61,7 +63,6 @@ class CleanMediaActivity : ComponentActivity() {
     private var destinationTreeUri: Uri? = null
     private var pendingUris: List<Uri> = emptyList()
     private var clipboardMimeType: String? = null
-    private var progressToast: Toast? = null
 
     private val picker = registerForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments()
@@ -103,17 +104,26 @@ class CleanMediaActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (intent.getBooleanExtra(EXTRA_PROGRESS_TOAST, false)) {
-            showProgressToast("Processing (20%)...")
-        }
         val debugPath = if (BuildConfig.DEBUG) intent.getStringExtra(EXTRA_DEBUG_PATH) else null
         val debugSource = debugPath?.let(::copyDebugSource)
+
         setContent {
             CleanCopyTheme {
                 BackHandler(enabled = progressState.isProcessing) { cancelProcessing() }
-                ProcessingOverlay(progressState, ::cancelProcessing)
+
+                if (completionData != null) {
+                    CleanResultModal(
+                        result = completionData!!,
+                        onDismiss = { finish() },
+                        onShare = { shareMedia(cleanedUris) },
+                        onViewHistory = { id -> openHistory(id) }
+                    )
+                } else {
+                    ProcessingOverlay(progressState, ::cancelProcessing)
+                }
             }
         }
+
         if (debugSource != null) {
             pickerLaunched = true
             window.decorView.post { launchProcessing(listOf(debugSource)) }
@@ -184,8 +194,7 @@ class CleanMediaActivity : ComponentActivity() {
             totalItems = uris.size,
             status = "Preparing clean copies..."
         )
-        showProgressToast("Processing (20%)...")
-        val sessionDirectory = File(cacheDir, "clipboard/${System.currentTimeMillis()}")
+        val sessionDirectory = File(cacheDir, "clipboard/${System.currentTimeMillis()}").apply { mkdirs() }
 
         processingJob = lifecycleScope.launch {
             try {
@@ -195,7 +204,8 @@ class CleanMediaActivity : ComponentActivity() {
                     uris
                 }
                 val prepared = mutableListOf<PreparedMedia>()
-                var skippedCount = 0
+                var totalRemovedMetadata = 0
+
                 inputUris.forEachIndexed { index, uri ->
                     val inspection = withContext(Dispatchers.IO) {
                         ClipboardMetadataReader.inspect(this@CleanMediaActivity, uri)
@@ -206,6 +216,7 @@ class CleanMediaActivity : ComponentActivity() {
                         !descriptor.requiresMp4Normalization &&
                         descriptor.sourceMimeType !in setOf("image/heic", "image/heif") &&
                         inspection.fields.isEmpty()
+
                     progressState = progressState.copy(
                         currentItem = index + 1,
                         currentType = inspection.kind.name.lowercase(),
@@ -219,7 +230,6 @@ class CleanMediaActivity : ComponentActivity() {
                     )
 
                     if (alreadyClean) {
-                        skippedCount++
                         prepared += PreparedMedia(
                             uri = uri,
                             displayName = inspection.displayName,
@@ -238,16 +248,17 @@ class CleanMediaActivity : ComponentActivity() {
                         ) { itemProgress ->
                             withContext(Dispatchers.Main.immediate) {
                                 progressState = progressState.copy(
-                                    progress = ((index + itemProgress) / inputUris.size)
-                                        .coerceIn(0f, 1f)
+                                    progress = ((index + itemProgress) / inputUris.size).coerceIn(0f, 1f)
                                 )
-                                showProgressToast("Processing (${(progressState.progress * 100).toInt()}%)...")
                             }
                         }
                         val cleanUri = outputUri(output)
                         val after = withContext(Dispatchers.IO) {
                             ClipboardMetadataReader.inspect(this@CleanMediaActivity, cleanUri)
                         }
+                        val removedCount = inspection.fields.size - after.fields.size
+                        if (removedCount > 0) totalRemovedMetadata += removedCount
+
                         prepared += PreparedMedia(
                             uri = cleanUri,
                             displayName = output.file.name,
@@ -261,7 +272,6 @@ class CleanMediaActivity : ComponentActivity() {
                 }
 
                 val finalMedia = if (saveToLibrary) {
-                    showProgressToast("Processing (90%)...")
                     val treeUri = destinationTreeUri ?: error("No save destination selected")
                     prepared.map { media ->
                         media.copy(
@@ -280,13 +290,17 @@ class CleanMediaActivity : ComponentActivity() {
                     prepared
                 }
 
-                showProgressToast("Processing (95%)...")
+                cleanedUris = finalMedia.map { it.uri }
+                val firstMime = finalMedia.firstOrNull()?.mimeType
 
                 if (copyToClipboardAfterSave || (!saveToLibrary && (currentClipboard || finalMedia.size == 1))) {
-                    copyToClipboard(finalMedia.map { it.uri })
-                } else if (!saveToLibrary) {
-                    shareMedia(finalMedia.map { it.uri })
+                    ClipboardHelper.copyMedia(
+                        context = this@CleanMediaActivity,
+                        uris = cleanedUris,
+                        mimeType = firstMime
+                    )
                 }
+
                 val historyEntries = finalMedia.filter {
                     it.wasSanitized || saveToLibrary || currentClipboard
                 }.map { media ->
@@ -303,41 +317,47 @@ class CleanMediaActivity : ComponentActivity() {
                 historyEntries.forEach { entry ->
                     ClipboardHistoryStore.record(this@CleanMediaActivity, entry)
                 }
-                historyEntries.firstOrNull()?.let { entry ->
-                    startActivity(
-                        Intent(this@CleanMediaActivity, MainActivity::class.java)
-                            .putExtra(MainActivity.EXTRA_HISTORY_ID, entry.id)
-                            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                    )
+
+                val firstItem = finalMedia.first()
+                val removedDetails = buildList {
+                    val hasLocation = firstItem.before.fields.any { it.label.contains("GPS", ignoreCase = true) || it.label.contains("Location", ignoreCase = true) }
+                    if (hasLocation) add("GPS location metadata removed")
+                    val hasExif = firstItem.before.fields.any { it.label.contains("Camera", ignoreCase = true) || it.label.contains("Make", ignoreCase = true) || it.label.contains("Date", ignoreCase = true) }
+                    if (hasExif) add("Camera & EXIF metadata scrubbed")
+                    if (FilenameRewriteStore.isEnabled(this@CleanMediaActivity)) add("Filename sanitized")
+                    if (totalRemovedMetadata > 0 && isEmpty()) add("$totalRemovedMetadata metadata fields removed")
                 }
 
-                val action = when {
-                    saveToLibrary -> "saved"
-                    currentClipboard || finalMedia.size == 1 -> "copied to clipboard"
-                    else -> "sent to the share sheet"
-                }
-                val skippedMessage = if (skippedCount > 0) {
-                    " ($skippedCount already clean)"
-                } else {
-                    ""
-                }
-                progressToast?.cancel()
-                Toast.makeText(
-                    this@CleanMediaActivity,
-                    "${finalMedia.size} media item${if (finalMedia.size == 1) "" else "s"} $action$skippedMessage",
-                    Toast.LENGTH_SHORT
-                ).show()
-                finish()
-            } catch (_: CancellationException) {
-                Log.i(TAG, "Cleaning canceled")
-                sessionDirectory.deleteRecursively()
-                progressToast?.cancel()
-                Toast.makeText(this@CleanMediaActivity, "Cleaning canceled", Toast.LENGTH_SHORT).show()
-                finish()
+                val allAlreadyClean = finalMedia.all { !it.wasSanitized }
+                progressState = progressState.copy(isProcessing = false)
+
+                completionData = CleanResultData(
+                    title = if (saveToLibrary) "Cleaned & Saved!" else "Cleaned & Copied!",
+                    subtitle = if (saveToLibrary) {
+                        "${finalMedia.size} item(s) saved to selected folder"
+                    } else if (finalMedia.size == 1) {
+                        "${formatMediaKind(firstItem.kind)} ready to paste"
+                    } else {
+                        "${finalMedia.size} media items ready to paste"
+                    },
+                    kind = firstItem.kind,
+                    primaryUri = firstItem.uri,
+                    sourceName = firstItem.displayName,
+                    removedCount = totalRemovedMetadata,
+                    removedDetails = removedDetails,
+                    wasAlreadyClean = allAlreadyClean,
+                    isSaved = saveToLibrary,
+                    historyId = historyEntries.firstOrNull()?.id
+                )
             } catch (error: Throwable) {
+                if (error is CancellationException) {
+                    Log.i(TAG, "Cleaning canceled")
+                    sessionDirectory.deleteRecursively()
+                    finish()
+                    return@launch
+                }
                 Log.e(TAG, "Could not clean selected media", error)
                 sessionDirectory.deleteRecursively()
-                progressToast?.cancel()
                 Toast.makeText(
                     this@CleanMediaActivity,
                     error.message ?: "Could not clean the selected media",
@@ -348,11 +368,13 @@ class CleanMediaActivity : ComponentActivity() {
         }
     }
 
-    private fun copyToClipboard(uris: List<Uri>) {
-        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val clip = ClipData.newUri(contentResolver, "CleanCopy clean media", uris.first())
-        uris.drop(1).forEach { uri -> clip.addItem(ClipData.Item(uri)) }
-        clipboard.setPrimaryClip(clip)
+    private fun openHistory(historyId: Long) {
+        startActivity(
+            Intent(this, MainActivity::class.java)
+                .putExtra(MainActivity.EXTRA_HISTORY_ID, historyId)
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        )
+        finish()
     }
 
     private fun snapshotClipboardUris(uris: List<Uri>, sessionDirectory: File): List<Uri> {
@@ -398,12 +420,22 @@ class CleanMediaActivity : ComponentActivity() {
     }
 
     private fun shareMedia(uris: List<Uri>) {
-        val share = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
-            type = "*/*"
-            putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            clipData = ClipData.newUri(contentResolver, "CleanCopy clean media", uris.first()).also { clip ->
-                uris.drop(1).forEach { clip.addItem(ClipData.Item(it)) }
+        if (uris.isEmpty()) return
+        val share = if (uris.size == 1) {
+            Intent(Intent.ACTION_SEND).apply {
+                type = contentResolver.getType(uris.first()) ?: "*/*"
+                putExtra(Intent.EXTRA_STREAM, uris.first())
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                clipData = ClipData.newUri(contentResolver, "CleanCopy clean media", uris.first())
+            }
+        } else {
+            Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+                type = "*/*"
+                putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                clipData = ClipData.newUri(contentResolver, "CleanCopy clean media", uris.first()).also { clip ->
+                    uris.drop(1).forEach { clip.addItem(ClipData.Item(it)) }
+                }
             }
         }
         startActivity(Intent.createChooser(share, "Share cleaned media"))
@@ -441,14 +473,6 @@ class CleanMediaActivity : ComponentActivity() {
 
     private fun cancelProcessing() {
         if (progressState.isProcessing) processingJob?.cancel() else finish()
-    }
-
-    private fun showProgressToast(message: String) {
-        (progressToast ?: Toast.makeText(this, message, Toast.LENGTH_SHORT).also { progressToast = it })
-            .apply {
-                setText(message)
-                show()
-            }
     }
 
     private fun copyDebugSource(path: String): Uri? = runCatching {
@@ -496,35 +520,32 @@ private fun ProcessingOverlay(state: ProcessingState, onCancel: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surface)
+            .background(Color.Black.copy(alpha = 0.35f)),
+        contentAlignment = Alignment.Center
     ) {
         if (state.isProcessing) {
-            Box(
+            Card(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.30f)),
-                contentAlignment = Alignment.Center
+                    .fillMaxWidth(0.88f)
+                    .padding(16.dp),
+                shape = RoundedCornerShape(24.dp)
             ) {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(24.dp),
-                    shape = RoundedCornerShape(24.dp)
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Column(
-                        modifier = Modifier.padding(24.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        Text("Cleaning ${state.currentType}", style = MaterialTheme.typography.headlineSmall)
-                        Text("Item ${state.currentItem} of ${state.totalItems}")
-                        LinearProgressIndicator(
-                            progress = state.progress,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Text(state.status, style = MaterialTheme.typography.bodyMedium)
-                        Button(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {
-                            Text("Cancel")
-                        }
+                    Text("Cleaning ${state.currentType}", style = MaterialTheme.typography.headlineSmall)
+                    if (state.totalItems > 1) {
+                        Text("Item ${state.currentItem} of ${state.totalItems}", style = MaterialTheme.typography.bodyMedium)
+                    }
+                    LinearProgressIndicator(
+                        progress = { state.progress },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Text(state.status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Button(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {
+                        Text("Cancel")
                     }
                 }
             }

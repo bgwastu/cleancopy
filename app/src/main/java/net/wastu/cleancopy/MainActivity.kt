@@ -177,13 +177,10 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun copyHistoryMedia(entry: ClipboardHistoryEntry) {
-        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         if (entry.kind == MediaKind.LINK) {
-            clipboard.setPrimaryClip(ClipData.newPlainText(entry.sourceName, entry.clipboardUri))
+            ClipboardHelper.copyText(this, entry.clipboardUri, entry.sourceName)
         } else {
-            clipboard.setPrimaryClip(
-                ClipData.newUri(contentResolver, entry.sourceName, Uri.parse(entry.clipboardUri))
-            )
+            ClipboardHelper.copyMedia(this, listOf(Uri.parse(entry.clipboardUri)), entry.sourceName)
         }
         Toast.makeText(this, "${formatMediaKind(entry.kind)} copied to clipboard", Toast.LENGTH_SHORT).show()
     }

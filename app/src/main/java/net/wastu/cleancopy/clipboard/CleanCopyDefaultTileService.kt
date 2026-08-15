@@ -24,7 +24,6 @@ class CleanCopyDefaultTileService : TileService() {
     @SuppressLint("StartActivityAndCollapseDeprecated")
     override fun onClick() {
         super.onClick()
-        Toast.makeText(this, "Processing (0%)...", Toast.LENGTH_SHORT).show()
         val intent = Intent(this, CleanClipboardActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {

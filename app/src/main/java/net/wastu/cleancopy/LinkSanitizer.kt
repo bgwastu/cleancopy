@@ -39,7 +39,39 @@ data class LinkRuleProvider(
 object LinkSanitizer {
     private val urlPattern = Pattern.compile("https?://[^\\s<>()\\[\\]{}\\\"]+", Pattern.CASE_INSENSITIVE)
     private val trailingPunctuation = ".,;:!?"
-    private val fallbackRules = listOf("utm_.*", "fbclid", "gclid", "dclid", "msclkid", "mc_[a-z]+", "_ga")
+    private val fallbackRules = listOf(
+        "utm_.*",
+        "fbclid",
+        "gclid",
+        "gclsrc",
+        "dclid",
+        "msclkid",
+        "mc_[a-z0-9_]+",
+        "_ga",
+        "_gl",
+        "yclid",
+        "twclid",
+        "zanpid",
+        "igsh",
+        "igshid",
+        "si",
+        "rdid",
+        "share_url",
+        "mibextid",
+        "sfnsn",
+        "paipv",
+        "eav",
+        "extid",
+        "refsrc",
+        "ref_src",
+        "ref_url",
+        "tt_from",
+        "share_app_id",
+        "share_link_id",
+        "share_item_id",
+        "_hsenc",
+        "_hsmi"
+    )
 
     fun containsLink(text: String): Boolean = urlPattern.matcher(text).find()
 
@@ -106,6 +138,9 @@ object LinkSanitizer {
                     current = runCatching { Pattern.compile(rawRule).matcher(current).replaceAll("") }.getOrDefault(current)
                 }
             }
+            if (current.endsWith("#")) {
+                current = current.removeSuffix("#")
+            }
             return LinkCleanResult(input, current, removed.toList(), redirects)
         }
         return LinkCleanResult(input, current, removed.toList(), redirects, "Redirect chain limit reached")
@@ -125,8 +160,8 @@ object LinkSanitizer {
             !shouldRemove
         }
         if (kept.size == query.split("&").size) return url
-        val base = url.substringBefore('?')
-        val fragment = uri.rawFragment?.let { "#$it" }.orEmpty()
+        val base = url.substringBefore('?').substringBefore('#')
+        val fragment = uri.rawFragment?.takeIf { it.isNotEmpty() }?.let { "#$it" }.orEmpty()
         return if (kept.isEmpty()) base + fragment else "$base?${kept.joinToString("&")}$fragment"
     }
 

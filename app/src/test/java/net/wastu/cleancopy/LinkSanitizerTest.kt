@@ -113,4 +113,14 @@ class LinkSanitizerTest {
             )
         )
     }
+
+    @Test
+    fun cleansFacebookReelWithRdidAndShareUrlAndFragment() {
+        val input = "https://www.facebook.com/reel/1293868375968987?rdid=SuZjXcXkyLu0d76Q&share_url=https%3A%2F%2Fwww.facebook.com%2Fshare%2Fr%2F1ELDAtuxZq%2F#"
+        val result = LinkSanitizer.cleanUrl(input, emptyList(), false)
+
+        assertEquals("https://www.facebook.com/reel/1293868375968987", result.cleaned)
+        assertEquals(listOf("rdid", "share_url"), result.removedParameters)
+        assertTrue(result.changed)
+    }
 }
