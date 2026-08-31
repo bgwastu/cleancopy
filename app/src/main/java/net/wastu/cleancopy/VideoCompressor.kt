@@ -27,7 +27,10 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import androidx.annotation.OptIn
+import androidx.media3.common.util.UnstableApi
 
+@OptIn(UnstableApi::class)
 object VideoCompressor {
     private const val MAX_HEIGHT = 720
     private const val PROGRESS_POLL_MS = 250L

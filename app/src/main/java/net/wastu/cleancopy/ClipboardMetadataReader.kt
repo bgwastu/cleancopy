@@ -54,7 +54,8 @@ object ClipboardMetadataReader {
     )
 
     private fun readVideoFields(context: Context, uri: Uri): List<MetadataField> = runCatching {
-        MediaMetadataRetriever().use { retriever ->
+        val retriever = MediaMetadataRetriever()
+        try {
             retriever.setDataSource(context, uri)
             videoTags.mapNotNull { (key, label) ->
                 retriever.extractMetadata(key)
@@ -62,6 +63,8 @@ object ClipboardMetadataReader {
                     ?.takeIf { it != ZERO_VIDEO_DATE }
                     ?.let { MetadataField(label, it) }
             }
+        } finally {
+            retriever.release()
         }
     }.getOrDefault(emptyList())
 

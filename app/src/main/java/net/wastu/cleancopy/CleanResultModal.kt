@@ -42,7 +42,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -75,9 +75,15 @@ import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.FileDownload
+import androidx.compose.material.icons.outlined.OpenInBrowser
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.IconButton
+
 data class CleanResultData(
-    val title: String = "Cleaned & Copied!",
-    val subtitle: String = "Ready to paste anywhere",
+    val title: String = "Clean Result",
+    val subtitle: String = "Review cleaned content & choose an action",
     val kind: MediaKind = MediaKind.IMAGE,
     val primaryUri: Uri? = null,
     val cleanedText: String? = null,
@@ -93,6 +99,9 @@ data class CleanResultData(
 fun CleanResultModal(
     result: CleanResultData,
     onDismiss: () -> Unit,
+    onCopyToClipboard: () -> Unit,
+    onSaveToDownloads: (() -> Unit)? = null,
+    onOpenInBrowser: (() -> Unit)? = null,
     onShare: (() -> Unit)? = null,
     onViewHistory: ((Long) -> Unit)? = null
 ) {
@@ -107,75 +116,93 @@ fun CleanResultModal(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.45f))
+                .background(Color.Black.copy(alpha = 0.55f))
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
                     onClick = onDismiss
                 ),
-            contentAlignment = Alignment.Center
+            contentAlignment = Alignment.BottomCenter
         ) {
             Card(
                 modifier = Modifier
-                    .fillMaxWidth(0.92f)
-                    .heightIn(max = 620.dp)
+                    .fillMaxWidth()
+                    .heightIn(max = 680.dp)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
                         onClick = {}
                     ),
-                shape = RoundedCornerShape(28.dp),
+                shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surface
                 ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                elevation = CardDefaults.cardElevation(defaultElevation = 16.dp)
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(24.dp)
+                        .padding(horizontal = 24.dp, vertical = 20.dp)
                         .verticalScroll(rememberScrollState()),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    // Header Status Icon
+                    // Drag Handle Indicator
                     Box(
                         modifier = Modifier
-                            .size(60.dp)
-                            .clip(CircleShape)
-                            .background(
-                                if (result.wasAlreadyClean) MaterialTheme.colorScheme.secondaryContainer
-                                else MaterialTheme.colorScheme.primaryContainer
-                            ),
-                        contentAlignment = Alignment.Center
+                            .width(40.dp)
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
+                    )
+
+                    // Header Row with Icon, Title, and Close
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = if (result.wasAlreadyClean) Icons.Outlined.Shield else Icons.Outlined.Check,
-                            contentDescription = null,
-                            tint = if (result.wasAlreadyClean) MaterialTheme.colorScheme.secondary
-                            else MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(32.dp)
-                        )
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = if (result.kind == MediaKind.LINK) MaterialTheme.colorScheme.primaryContainer
+                                    else if (result.wasAlreadyClean) MaterialTheme.colorScheme.secondaryContainer
+                                    else MaterialTheme.colorScheme.primaryContainer,
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = if (result.kind == MediaKind.LINK) Icons.Outlined.Link
+                                    else if (result.wasAlreadyClean) Icons.Outlined.Shield
+                                    else Icons.Outlined.Check,
+                                    contentDescription = null,
+                                    tint = if (result.kind == MediaKind.LINK) MaterialTheme.colorScheme.onPrimaryContainer
+                                    else if (result.wasAlreadyClean) MaterialTheme.colorScheme.onSecondaryContainer
+                                    else MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.size(26.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.width(16.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = result.title,
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = result.subtitle,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        IconButton(onClick = onDismiss) {
+                            Icon(Icons.Outlined.Close, contentDescription = "Close", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
 
-                    // Title & Subtitle
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Text(
-                            text = result.title,
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
-                            textAlign = TextAlign.Center
-                        )
-                        Text(
-                            text = result.subtitle,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center
-                        )
-                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
                     // Preview Content (Image / Video / Link)
                     ResultPreview(result)
@@ -183,37 +210,80 @@ fun CleanResultModal(
                     // Scrubbed Items / Details Card
                     ScrubbedDetailsCard(result)
 
-                    // Action Buttons
+                    Spacer(Modifier.height(4.dp))
+
+                    // Action Buttons tailored for Link vs Media
                     Column(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
+                        // 1. Copy to Clipboard (Primary)
                         Button(
-                            onClick = onDismiss,
+                            onClick = {
+                                onCopyToClipboard()
+                            },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(48.dp),
-                            shape = RoundedCornerShape(14.dp)
+                                .height(52.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            )
                         ) {
-                            Icon(Icons.Outlined.Check, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text("Done", style = MaterialTheme.typography.labelLarge)
+                            Icon(Icons.Outlined.ContentCopy, contentDescription = null, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(10.dp))
+                            Text("Copy to Clipboard", style = MaterialTheme.typography.labelLarge)
                         }
 
+                        // 2. Save to Downloads (for Image/Video) or Open in Browser (for Link)
+                        if (result.kind == MediaKind.LINK) {
+                            if (onOpenInBrowser != null) {
+                                FilledTonalButton(
+                                    onClick = onOpenInBrowser,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(52.dp),
+                                    shape = RoundedCornerShape(16.dp)
+                                ) {
+                                    Icon(Icons.AutoMirrored.Outlined.OpenInNew, contentDescription = null, modifier = Modifier.size(20.dp))
+                                    Spacer(Modifier.width(10.dp))
+                                    Text("Open in Browser", style = MaterialTheme.typography.labelLarge)
+                                }
+                            }
+                        } else if (onSaveToDownloads != null) {
+                            FilledTonalButton(
+                                onClick = onSaveToDownloads,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(52.dp),
+                                    shape = RoundedCornerShape(16.dp)
+                            ) {
+                                Icon(Icons.Outlined.FileDownload, contentDescription = null, modifier = Modifier.size(20.dp))
+                                Spacer(Modifier.width(10.dp))
+                                Text("Save to Downloads", style = MaterialTheme.typography.labelLarge)
+                            }
+                        }
+
+                        // 3. Share Button
                         if (onShare != null) {
                             OutlinedButton(
                                 onClick = onShare,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(48.dp),
-                                shape = RoundedCornerShape(14.dp)
+                                    .height(52.dp),
+                                shape = RoundedCornerShape(16.dp)
                             ) {
-                                Icon(Icons.Outlined.Share, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(8.dp))
-                                Text("Share Cleaned ${formatMediaKind(result.kind)}", style = MaterialTheme.typography.labelLarge)
+                                Icon(Icons.Outlined.Share, contentDescription = null, modifier = Modifier.size(20.dp))
+                                Spacer(Modifier.width(10.dp))
+                                Text(
+                                    if (result.kind == MediaKind.LINK) "Share Clean Link" else "Share Clean Media",
+                                    style = MaterialTheme.typography.labelLarge
+                                )
                             }
                         }
 
+                        // 4. Optional View History
                         if (onViewHistory != null && result.historyId != null) {
                             TextButton(
                                 onClick = { onViewHistory(result.historyId) },

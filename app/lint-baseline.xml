@@ -3,17 +3,6 @@
 
     <issue
         id="NewApi"
-        message="Implicit cast from `MediaMetadataRetriever` to `AutoCloseable` requires API level 29 (current min is 26)"
-        errorLine1="        MediaMetadataRetriever().use { retriever ->"
-        errorLine2="                                 ~~~">
-        <location
-            file="src/main/java/net/wastu/cleancopy/ClipboardMetadataReader.kt"
-            line="57"
-            column="34"/>
-    </issue>
-
-    <issue
-        id="NewApi"
         message="`android:windowLightNavigationBar` requires API level 27 (current min is 26)"
         errorLine1="        &lt;item name=&quot;android:windowLightNavigationBar&quot;>false&lt;/item>"
         errorLine2="              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
@@ -68,46 +57,13 @@
     </issue>
 
     <issue
-        id="StartActivityAndCollapseDeprecated"
-        message="TileService#startActivityAndCollapse(Intent) is deprecated. Use TileService#startActivityAndCollapse(PendingIntent) instead."
-        errorLine1="            startActivityAndCollapse(intent)"
-        errorLine2="                                     ~~~~~~">
-        <location
-            file="src/main/java/net/wastu/cleancopy/clipboard/CleanCopyTileService.kt"
-            line="42"
-            column="38"/>
-    </issue>
-
-    <issue
-        id="StartActivityAndCollapseDeprecated"
-        message="TileService#startActivityAndCollapse(Intent) is deprecated. Use TileService#startActivityAndCollapse(PendingIntent) instead."
-        errorLine1="            startActivityAndCollapse(intent)"
-        errorLine2="                                     ~~~~~~">
-        <location
-            file="src/main/java/net/wastu/cleancopy/clipboard/CleanCurrentClipboardTileService.kt"
-            line="36"
-            column="38"/>
-    </issue>
-
-    <issue
-        id="WrongConstant"
-        message="Must be one or more of: MediaCodec.BUFFER_FLAG_SYNC_FRAME, MediaCodec.BUFFER_FLAG_KEY_FRAME, MediaCodec.BUFFER_FLAG_CODEC_CONFIG, MediaCodec.BUFFER_FLAG_END_OF_STREAM, MediaCodec.BUFFER_FLAG_PARTIAL_FRAME, MediaCodec.BUFFER_FLAG_DECODE_ONLY, but could be MediaExtractor.SAMPLE_FLAG_SYNC, MediaExtractor.SAMPLE_FLAG_ENCRYPTED, MediaExtractor.SAMPLE_FLAG_PARTIAL_FRAME"
-        errorLine1="                    info.flags = extractor.sampleFlags"
-        errorLine2="                                 ~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="src/main/java/net/wastu/cleancopy/VideoSanitizer.kt"
-            line="100"
-            column="34"/>
-    </issue>
-
-    <issue
         id="InflateParams"
         message="Avoid passing `null` as the view root (needed to resolve layout parameters on the inflated layout&apos;s root element)"
         errorLine1="                        .inflate(R.layout.view_video_player, null, false)"
         errorLine2="                                                             ~~~~">
         <location
             file="src/main/java/net/wastu/cleancopy/MainScreen.kt"
-            line="371"
+            line="391"
             column="62"/>
     </issue>
 
@@ -135,7 +91,7 @@
 
     <issue
         id="AndroidGradlePluginVersion"
-        message="A newer version of Gradle than 9.5.0 is available: 9.7.0"
+        message="A newer version of Gradle than 9.5.0 is available: 9.7.1"
         errorLine1="distributionUrl=https\://services.gradle.org/distributions/gradle-9.5.0-all.zip"
         errorLine2="                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
@@ -201,7 +157,7 @@
 
     <issue
         id="GradleDependency"
-        message="A newer version of androidx.paging:paging-runtime-ktx than 3.2.1 is available: 3.5.0"
+        message="A newer version of androidx.paging:paging-runtime-ktx than 3.2.1 is available: 3.5.1"
         errorLine1="    implementation(&quot;androidx.paging:paging-runtime-ktx:3.2.1&quot;)"
         errorLine2="                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
@@ -212,7 +168,7 @@
 
     <issue
         id="GradleDependency"
-        message="A newer version of androidx.paging:paging-compose than 3.2.1 is available: 3.5.0"
+        message="A newer version of androidx.paging:paging-compose than 3.2.1 is available: 3.5.1"
         errorLine1="    implementation(&quot;androidx.paging:paging-compose:3.2.1&quot;)"
         errorLine2="                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
@@ -310,303 +266,6 @@
     </issue>
 
     <issue
-        id="UnsafeOptInUsageError"
-        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
-        errorLine1="            lateinit var transformer: Transformer"
-        errorLine2="                                      ~~~~~~~~~~~">
-        <location
-            file="src/main/java/net/wastu/cleancopy/VideoCompressor.kt"
-            line="65"
-            column="39"/>
-    </issue>
-
-    <issue
-        id="UnsafeOptInUsageError"
-        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
-        errorLine1="            transformer = Transformer.Builder(context)"
-        errorLine2="            ~~~~~~~~~~~">
-        <location
-            file="src/main/java/net/wastu/cleancopy/VideoCompressor.kt"
-            line="73"
-            column="13"/>
-    </issue>
-
-    <issue
-        id="UnsafeOptInUsageError"
-        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
-        errorLine1="            transformer = Transformer.Builder(context)"
-        errorLine2="                                      ~~~~~~~">
-        <location
-            file="src/main/java/net/wastu/cleancopy/VideoCompressor.kt"
-            line="73"
-            column="39"/>
-    </issue>
-
-    <issue
-        id="UnsafeOptInUsageError"
-        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
-        errorLine1="                .setVideoMimeType(MimeTypes.VIDEO_H264)"
-        errorLine2="                 ~~~~~~~~~~~~~~~~">
-        <location
-            file="src/main/java/net/wastu/cleancopy/VideoCompressor.kt"
-            line="74"
-            column="18"/>
-    </issue>
-
-    <issue
-        id="UnsafeOptInUsageError"
-        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
-        errorLine1="                .setAudioMimeType(MimeTypes.AUDIO_AAC)"
-        errorLine2="                 ~~~~~~~~~~~~~~~~">
-        <location
-            file="src/main/java/net/wastu/cleancopy/VideoCompressor.kt"
-            line="75"
-            column="18"/>
-    </issue>
-
-    <issue
-        id="UnsafeOptInUsageError"
-        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
-        errorLine1="                .addListener(object : Transformer.Listener {"
-        errorLine2="                 ~~~~~~~~~~~">
-        <location
-            file="src/main/java/net/wastu/cleancopy/VideoCompressor.kt"
-            line="76"
-            column="18"/>
-    </issue>
-
-    <issue
-        id="UnsafeOptInUsageError"
-        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
-        errorLine1="                    override fun onCompleted(composition: Composition, result: ExportResult) {"
-        errorLine2="                                 ~~~~~~~~~~~">
-        <location
-            file="src/main/java/net/wastu/cleancopy/VideoCompressor.kt"
-            line="77"
-            column="34"/>
-    </issue>
-
-    <issue
-        id="UnsafeOptInUsageError"
-        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
-        errorLine1="                    override fun onCompleted(composition: Composition, result: ExportResult) {"
-        errorLine2="                                                          ~~~~~~~~~~~">
-        <location
-            file="src/main/java/net/wastu/cleancopy/VideoCompressor.kt"
-            line="77"
-            column="59"/>
-    </issue>
-
-    <issue
-        id="UnsafeOptInUsageError"
-        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
-        errorLine1="                    override fun onCompleted(composition: Composition, result: ExportResult) {"
-        errorLine2="                                                                               ~~~~~~~~~~~~">
-        <location
-            file="src/main/java/net/wastu/cleancopy/VideoCompressor.kt"
-            line="77"
-            column="80"/>
-    </issue>
-
-    <issue
-        id="UnsafeOptInUsageError"
-        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
-        errorLine1="                    override fun onError("
-        errorLine2="                                 ~~~~~~~">
-        <location
-            file="src/main/java/net/wastu/cleancopy/VideoCompressor.kt"
-            line="81"
-            column="34"/>
-    </issue>
-
-    <issue
-        id="UnsafeOptInUsageError"
-        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
-        errorLine1="                        composition: Composition,"
-        errorLine2="                                     ~~~~~~~~~~~">
-        <location
-            file="src/main/java/net/wastu/cleancopy/VideoCompressor.kt"
-            line="82"
-            column="38"/>
-    </issue>
-
-    <issue
-        id="UnsafeOptInUsageError"
-        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
-        errorLine1="                        result: ExportResult,"
-        errorLine2="                                ~~~~~~~~~~~~">
-        <location
-            file="src/main/java/net/wastu/cleancopy/VideoCompressor.kt"
-            line="83"
-            column="33"/>
-    </issue>
-
-    <issue
-        id="UnsafeOptInUsageError"
-        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
-        errorLine1="                        exception: ExportException"
-        errorLine2="                                   ~~~~~~~~~~~~~~~">
-        <location
-            file="src/main/java/net/wastu/cleancopy/VideoCompressor.kt"
-            line="84"
-            column="36"/>
-    </issue>
-
-    <issue
-        id="UnsafeOptInUsageError"
-        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
-        errorLine1="                .build()"
-        errorLine2="                 ~~~~~">
-        <location
-            file="src/main/java/net/wastu/cleancopy/VideoCompressor.kt"
-            line="89"
-            column="18"/>
-    </issue>
-
-    <issue
-        id="UnsafeOptInUsageError"
-        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
-        errorLine1="                mainHandler.post { runCatching { transformer.cancel() } }"
-        errorLine2="                                                             ~~~~~~">
-        <location
-            file="src/main/java/net/wastu/cleancopy/VideoCompressor.kt"
-            line="93"
-            column="62"/>
-    </issue>
-
-    <issue
-        id="UnsafeOptInUsageError"
-        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
-        errorLine1="            val editedMediaItem = EditedMediaItem.Builder(MediaItem.fromUri(source))"
-        errorLine2="                ~~~~~~~~~~~~~~~">
-        <location
-            file="src/main/java/net/wastu/cleancopy/VideoCompressor.kt"
-            line="96"
-            column="17"/>
-    </issue>
-
-    <issue
-        id="UnsafeOptInUsageError"
-        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
-        errorLine1="            val editedMediaItem = EditedMediaItem.Builder(MediaItem.fromUri(source))"
-        errorLine2="                                                  ~~~~~~~">
-        <location
-            file="src/main/java/net/wastu/cleancopy/VideoCompressor.kt"
-            line="96"
-            column="51"/>
-    </issue>
-
-    <issue
-        id="UnsafeOptInUsageError"
-        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
-        errorLine1="                .setEffects("
-        errorLine2="                 ~~~~~~~~~~">
-        <location
-            file="src/main/java/net/wastu/cleancopy/VideoCompressor.kt"
-            line="97"
-            column="18"/>
-    </issue>
-
-    <issue
-        id="UnsafeOptInUsageError"
-        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
-        errorLine1="                    Effects("
-        errorLine2="                    ~~~~~~~">
-        <location
-            file="src/main/java/net/wastu/cleancopy/VideoCompressor.kt"
-            line="98"
-            column="21"/>
-    </issue>
-
-    <issue
-        id="UnsafeOptInUsageError"
-        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
-        errorLine1="                        listOf(Presentation.createForHeight(targetHeight))"
-        errorLine2="                                            ~~~~~~~~~~~~~~~">
-        <location
-            file="src/main/java/net/wastu/cleancopy/VideoCompressor.kt"
-            line="100"
-            column="45"/>
-    </issue>
-
-    <issue
-        id="UnsafeOptInUsageError"
-        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
-        errorLine1="                .build()"
-        errorLine2="                 ~~~~~">
-        <location
-            file="src/main/java/net/wastu/cleancopy/VideoCompressor.kt"
-            line="103"
-            column="18"/>
-    </issue>
-
-    <issue
-        id="UnsafeOptInUsageError"
-        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
-        errorLine1="                val progressHolder = ProgressHolder()"
-        errorLine2="                    ~~~~~~~~~~~~~~">
-        <location
-            file="src/main/java/net/wastu/cleancopy/VideoCompressor.kt"
-            line="106"
-            column="21"/>
-    </issue>
-
-    <issue
-        id="UnsafeOptInUsageError"
-        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
-        errorLine1="                val progressHolder = ProgressHolder()"
-        errorLine2="                                     ~~~~~~~~~~~~~~">
-        <location
-            file="src/main/java/net/wastu/cleancopy/VideoCompressor.kt"
-            line="106"
-            column="38"/>
-    </issue>
-
-    <issue
-        id="UnsafeOptInUsageError"
-        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
-        errorLine1="                    if (transformer.getProgress(progressHolder) == Transformer.PROGRESS_STATE_AVAILABLE) {"
-        errorLine2="                                    ~~~~~~~~~~~">
-        <location
-            file="src/main/java/net/wastu/cleancopy/VideoCompressor.kt"
-            line="108"
-            column="37"/>
-    </issue>
-
-    <issue
-        id="UnsafeOptInUsageError"
-        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
-        errorLine1="                    if (transformer.getProgress(progressHolder) == Transformer.PROGRESS_STATE_AVAILABLE) {"
-        errorLine2="                                                                               ~~~~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="src/main/java/net/wastu/cleancopy/VideoCompressor.kt"
-            line="108"
-            column="80"/>
-    </issue>
-
-    <issue
-        id="UnsafeOptInUsageError"
-        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
-        errorLine1="                        onProgress((progressHolder.progress / 100f).coerceIn(0f, 0.99f))"
-        errorLine2="                                                   ~~~~~~~~">
-        <location
-            file="src/main/java/net/wastu/cleancopy/VideoCompressor.kt"
-            line="109"
-            column="52"/>
-    </issue>
-
-    <issue
-        id="UnsafeOptInUsageError"
-        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
-        errorLine1="            transformer.start(editedMediaItem, output.absolutePath)"
-        errorLine2="                        ~~~~~">
-        <location
-            file="src/main/java/net/wastu/cleancopy/VideoCompressor.kt"
-            line="114"
-            column="25"/>
-    </issue>
-
-    <issue
         id="DataExtractionRules"
         message="The attribute `android:allowBackup` is deprecated from Android 12 and higher and may be removed in future versions. Consider adding the attribute `android:dataExtractionRules` specifying an `@xml` resource which configures cloud backups and device transfers on Android 12 and higher."
         errorLine1="        android:allowBackup=&quot;false&quot;"
@@ -627,12 +286,34 @@
     <issue
         id="UseKtx"
         message="Use the KTX extension function `String.toUri` instead?"
-        errorLine1="                    runCatching { Uri.parse(text) }.getOrNull()"
+        errorLine1="        val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {"
+        errorLine2="                                                       ~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/net/wastu/cleancopy/CleanClipboardActivity.kt"
+            line="69"
+            column="56"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="                    runCatching { Uri.parse(text) }.getOrNull()?.let(::add)"
         errorLine2="                                  ~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/net/wastu/cleancopy/CleanMediaActivity.kt"
-            line="133"
+            file="src/main/java/net/wastu/cleancopy/CleanClipboardActivity.kt"
+            line="213"
             column="35"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="                        runCatching { Uri.parse(text) }.getOrNull()?.let(::add)"
+        errorLine2="                                      ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/net/wastu/cleancopy/CleanMediaActivity.kt"
+            line="150"
+            column="39"/>
     </issue>
 
     <issue
@@ -697,7 +378,7 @@
         errorLine2="        ^">
         <location
             file="src/main/java/net/wastu/cleancopy/LinkSanitizer.kt"
-            line="157"
+            line="192"
             column="9"/>
     </issue>
 
@@ -708,7 +389,7 @@
         errorLine2="                        ~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/net/wastu/cleancopy/LinkSanitizer.kt"
-            line="297"
+            line="339"
             column="25"/>
     </issue>
 
@@ -719,7 +400,7 @@
         errorLine2="                    ~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/net/wastu/cleancopy/LinkSanitizer.kt"
-            line="306"
+            line="355"
             column="21"/>
     </issue>
 
@@ -730,7 +411,7 @@
         errorLine2="                                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/net/wastu/cleancopy/MainActivity.kt"
-            line="132"
+            line="166"
             column="40"/>
     </issue>
 
@@ -741,19 +422,19 @@
         errorLine2="                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/net/wastu/cleancopy/MainActivity.kt"
-            line="136"
+            line="170"
             column="33"/>
     </issue>
 
     <issue
         id="UseKtx"
         message="Use the KTX extension function `String.toUri` instead?"
-        errorLine1="                ClipData.newUri(contentResolver, entry.sourceName, Uri.parse(entry.clipboardUri))"
-        errorLine2="                                                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        errorLine1="            ClipboardHelper.copyMedia(this, listOf(Uri.parse(entry.clipboardUri)), entry.sourceName)"
+        errorLine2="                                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/net/wastu/cleancopy/MainActivity.kt"
-            line="151"
-            column="68"/>
+            line="183"
+            column="52"/>
     </issue>
 
     <issue
@@ -763,7 +444,7 @@
         errorLine2="                                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/net/wastu/cleancopy/MainScreen.kt"
-            line="323"
+            line="343"
             column="40"/>
     </issue>
 
@@ -774,19 +455,19 @@
         errorLine2="                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/net/wastu/cleancopy/MainScreen.kt"
-            line="356"
+            line="376"
             column="37"/>
     </issue>
 
     <issue
         id="UseKtx"
-        message="Use the KTX extension function `SharedPreferences.edit` instead?"
-        errorLine1="        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)"
-        errorLine2="        ^">
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="        val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {"
+        errorLine2="                                                       ~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/net/wastu/cleancopy/OutputNameStore.kt"
-            line="19"
-            column="9"/>
+            file="src/main/java/net/wastu/cleancopy/ShareReceiverActivity.kt"
+            line="112"
+            column="56"/>
     </issue>
 
     <issue

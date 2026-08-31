@@ -45,6 +45,18 @@ class CleanClipboardActivity : ComponentActivity() {
                         CleanResultModal(
                             result = data,
                             onDismiss = { finish() },
+                            onCopyToClipboard = {
+                                data.cleanedText?.let { text ->
+                                    ClipboardHelper.copyText(this@CleanClipboardActivity, text, "CleanCopy clean links")
+                                    Toast.makeText(this@CleanClipboardActivity, "Link copied to clipboard", Toast.LENGTH_SHORT).show()
+                                }
+                                finish()
+                            },
+                            onOpenInBrowser = {
+                                data.cleanedText?.let { text ->
+                                    openInBrowser(text)
+                                }
+                            },
                             onShare = { shareText(data.cleanedText ?: "") },
                             onViewHistory = { id -> openHistory(id) }
                         )
@@ -52,6 +64,16 @@ class CleanClipboardActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    private fun openInBrowser(url: String) {
+        val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        runCatching { startActivity(browserIntent) }
+            .onFailure {
+                Toast.makeText(this, "Could not open browser", Toast.LENGTH_SHORT).show()
+            }
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -63,6 +85,14 @@ class CleanClipboardActivity : ComponentActivity() {
 
     private fun processClipboard(attempt: Int = 0) {
         if (started) return
+
+        val customText = intent.getStringExtra(EXTRA_INPUT_TEXT)
+        if (!customText.isNullOrBlank()) {
+            started = true
+            cleanUrlText(customText)
+            return
+        }
+
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         val clip = runCatching {
             if (clipboard.hasPrimaryClip()) clipboard.primaryClip else null
@@ -81,44 +111,7 @@ class CleanClipboardActivity : ComponentActivity() {
 
         val text = clip.webText()
         if (LinkCleanupStore.isEnabled(this) && LinkSanitizer.containsLink(text)) {
-            lifecycleScope.launch {
-                val result = withContext(Dispatchers.IO) {
-                    LinkSanitizer.cleanText(
-                        text,
-                        LinkRuleStore.providers(this@CleanClipboardActivity),
-                        removeReferrals = false,
-                        resolver = NetworkRedirectResolver::resolve
-                    )
-                }
-                if (result.text != text) {
-                    ClipboardHelper.copyText(this@CleanClipboardActivity, result.text, "CleanCopy clean links")
-                }
-                val historyEntry = recordCleanedLinks(this@CleanClipboardActivity, result)
-
-                val count = result.links.count { it.changed }
-                val removedParams = result.links.flatMap { it.removedParameters }.distinct()
-                val details = buildList {
-                    if (count > 0) {
-                        if (removedParams.isNotEmpty()) {
-                            add("Stripped: ${removedParams.take(4).joinToString(", ")}")
-                        } else {
-                            add("$count tracking parameter(s) removed")
-                        }
-                    }
-                }
-
-                completionData = CleanResultData(
-                    title = "Cleaned & Copied!",
-                    subtitle = if (count > 0) "$count link(s) sanitized" else "No tracking parameters found in link",
-                    kind = MediaKind.LINK,
-                    cleanedText = result.text,
-                    sourceName = text.take(60),
-                    removedCount = count,
-                    removedDetails = details,
-                    wasAlreadyClean = count == 0,
-                    historyId = historyEntry?.id
-                )
-            }
+            cleanUrlText(text)
             return
         }
 
@@ -152,6 +145,44 @@ class CleanClipboardActivity : ComponentActivity() {
                 Toast.makeText(this@CleanClipboardActivity, error.message ?: "Could not read the copied media", Toast.LENGTH_SHORT).show()
                 finish()
             }
+        }
+    }
+
+    private fun cleanUrlText(text: String) {
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                LinkSanitizer.cleanText(
+                    text,
+                    LinkRuleStore.providers(this@CleanClipboardActivity),
+                    removeReferrals = false,
+                    resolver = NetworkRedirectResolver::resolve
+                )
+            }
+            val historyEntry = recordCleanedLinks(this@CleanClipboardActivity, result)
+
+            val count = result.links.count { it.changed }
+            val removedParams = result.links.flatMap { it.removedParameters }.distinct()
+            val details = buildList {
+                if (count > 0) {
+                    if (removedParams.isNotEmpty()) {
+                        add("Stripped: ${removedParams.take(4).joinToString(", ")}")
+                    } else {
+                        add("$count tracking parameter(s) removed")
+                    }
+                }
+            }
+
+            completionData = CleanResultData(
+                title = if (count > 0) "Link Cleaned" else "Link Checked",
+                subtitle = if (count > 0) "$count tracking parameter(s) removed" else "No tracking parameters found",
+                kind = MediaKind.LINK,
+                cleanedText = result.text,
+                sourceName = text.take(60),
+                removedCount = count,
+                removedDetails = details,
+                wasAlreadyClean = count == 0,
+                historyId = historyEntry?.id
+            )
         }
     }
 
@@ -237,9 +268,10 @@ class CleanClipboardActivity : ComponentActivity() {
         else -> null
     }
 
-    private companion object {
-        const val CLIPBOARD_READ_RETRIES = 10
-        const val CLIPBOARD_RETRY_DELAY_MS = 150L
+    companion object {
+        const val EXTRA_INPUT_TEXT = "net.wastu.cleancopy.extra.INPUT_TEXT"
+        private const val CLIPBOARD_READ_RETRIES = 10
+        private const val CLIPBOARD_RETRY_DELAY_MS = 150L
     }
 }
 

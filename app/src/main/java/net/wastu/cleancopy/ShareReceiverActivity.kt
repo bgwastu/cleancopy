@@ -12,10 +12,16 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Movie
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.LinearProgressIndicator
@@ -27,6 +33,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
@@ -60,6 +67,27 @@ class ShareReceiverActivity : ComponentActivity() {
                         processingJob?.cancel()
                         finish()
                     },
+                    onCopyToClipboard = { result ->
+                        if (result.kind == MediaKind.LINK) {
+                            result.cleanedText?.let { text ->
+                                ClipboardHelper.copyText(this@ShareReceiverActivity, text, "CleanCopy clean links")
+                                Toast.makeText(this@ShareReceiverActivity, "Link copied to clipboard", Toast.LENGTH_SHORT).show()
+                            }
+                        } else {
+                            result.primaryUri?.let { uri ->
+                                val mime = if (result.kind == MediaKind.IMAGE) "image/*" else "video/*"
+                                ClipboardHelper.copyMedia(this@ShareReceiverActivity, listOf(uri), mimeType = mime)
+                                Toast.makeText(this@ShareReceiverActivity, "Copied to clipboard", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                        finish()
+                    },
+                    onSaveToDownloads = { uri, mimeType ->
+                        saveMediaToDownloads(uri, mimeType)
+                    },
+                    onOpenInBrowser = { url ->
+                        openInBrowser(url)
+                    },
                     onShareMedia = { uri, mimeType -> shareMedia(uri, mimeType) },
                     onShareText = { text -> shareText(text) },
                     onViewHistory = { historyId -> openHistoryDetail(historyId) }
@@ -68,6 +96,34 @@ class ShareReceiverActivity : ComponentActivity() {
         }
 
         processIncomingShare()
+    }
+
+    private fun saveMediaToDownloads(uri: Uri, mimeType: String) {
+        val ext = ClipboardHelper.extensionToMime(mimeType).let {
+            if (mimeType.startsWith("video/")) "mp4" else "jpg"
+        }
+        val saveName = "cleancopy_${System.currentTimeMillis()}.$ext"
+        val saveResult = DownloadsSaver.saveToDownloads(
+            context = this,
+            sourceUri = uri,
+            displayName = saveName,
+            mimeType = mimeType
+        )
+        if (saveResult.isSuccess) {
+            Toast.makeText(this, "Saved to Downloads", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(this, "Could not save to Downloads", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun openInBrowser(url: String) {
+        val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        runCatching { startActivity(browserIntent) }
+            .onFailure {
+                Toast.makeText(this, "Could not open browser", Toast.LENGTH_SHORT).show()
+            }
     }
 
     private fun processIncomingShare() {
@@ -349,6 +405,9 @@ private fun ShareContent(
     state: ShareUiState,
     onDismiss: () -> Unit,
     onCancel: () -> Unit,
+    onCopyToClipboard: (CleanResultData) -> Unit,
+    onSaveToDownloads: (Uri, String) -> Unit,
+    onOpenInBrowser: (String) -> Unit,
     onShareMedia: (Uri, String) -> Unit,
     onShareText: (String) -> Unit,
     onViewHistory: (Long) -> Unit
@@ -361,44 +420,27 @@ private fun ShareContent(
                     .background(Color.Black.copy(alpha = 0.35f))
             )
         }
-        is ShareUiState.Processing -> {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.45f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth(0.88f)
-                        .padding(16.dp),
-                    shape = RoundedCornerShape(24.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(24.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text("Cleaning in progress...", style = MaterialTheme.typography.titleLarge)
-                        if (state.totalItems > 1) {
-                            Text("Item ${state.currentItem} of ${state.totalItems}", style = MaterialTheme.typography.bodyMedium)
-                        }
-                        LinearProgressIndicator(
-                            progress = { state.progress },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Text(state.status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Button(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {
-                            Text("Cancel")
-                        }
-                    }
-                }
-            }
-        }
+        is ShareUiState.Processing -> ShareProcessingSheet(state, onCancel)
         is ShareUiState.Completed -> {
             CleanResultModal(
                 result = state.result,
                 onDismiss = onDismiss,
+                onCopyToClipboard = {
+                    onCopyToClipboard(state.result)
+                },
+                onSaveToDownloads = if (state.result.kind != MediaKind.LINK) {
+                    {
+                        state.result.primaryUri?.let { uri ->
+                            val mime = if (state.result.kind == MediaKind.IMAGE) "image/jpeg" else "video/mp4"
+                            onSaveToDownloads(uri, mime)
+                        }
+                    }
+                } else null,
+                onOpenInBrowser = if (state.result.kind == MediaKind.LINK) {
+                    {
+                        state.result.cleanedText?.let(onOpenInBrowser)
+                    }
+                } else null,
                 onShare = {
                     if (state.result.kind == MediaKind.LINK) {
                         state.result.cleanedText?.let(onShareText)
@@ -411,6 +453,104 @@ private fun ShareContent(
                 },
                 onViewHistory = onViewHistory
             )
+        }
+    }
+}
+
+@Composable
+private fun ShareProcessingSheet(state: ShareUiState.Processing, onCancel: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.55f)),
+        contentAlignment = Alignment.BottomCenter
+    ) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
+            colors = androidx.compose.material3.CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            ),
+            elevation = androidx.compose.material3.CardDefaults.cardElevation(defaultElevation = 16.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Drag handle
+                Box(
+                    modifier = Modifier
+                        .width(40.dp)
+                        .height(4.dp)
+                        .background(
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+                            RoundedCornerShape(2.dp)
+                        )
+                )
+
+                androidx.compose.foundation.layout.Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    androidx.compose.material3.Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        modifier = Modifier.then(
+                            Modifier
+                                .then(Modifier.padding(0.dp))
+                        )
+                    ) {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.padding(12.dp)
+                        ) {
+                            androidx.compose.material3.Icon(
+                                imageVector = androidx.compose.material.icons.Icons.Outlined.Movie,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                    }
+
+                    androidx.compose.foundation.layout.Spacer(modifier = Modifier.width(16.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = if (state.totalItems > 1)
+                                "Cleaning… (${state.currentItem}/${state.totalItems})"
+                            else "Cleaning…",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                        )
+                        Text(
+                            text = state.status,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                LinearProgressIndicator(
+                    progress = { state.progress },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(8.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                )
+
+                androidx.compose.material3.OutlinedButton(
+                    onClick = onCancel,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Text("Cancel", style = MaterialTheme.typography.labelLarge)
+                }
+            }
         }
     }
 }

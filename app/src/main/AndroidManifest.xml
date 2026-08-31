@@ -72,10 +72,6 @@
             android:exported="false" />
 
         <service
-            android:name=".ClipboardLinkService"
-            android:exported="false" />
-
-        <service
             android:name=".clipboard.CleanCopyDefaultTileService"
             android:exported="true"
             android:icon="@drawable/ic_clean_copy_mark"

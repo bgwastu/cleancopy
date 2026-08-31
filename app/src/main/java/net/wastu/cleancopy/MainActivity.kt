@@ -62,19 +62,29 @@ class MainActivity : ComponentActivity() {
                 history = ClipboardHistoryStore.entries(this@MainActivity)
             }
 
+            // Read clipboard URL to show preview in the button
+            var clipboardUrl by remember { mutableStateOf<String?>(null) }
+            LaunchedEffect(resumeTick) {
+                val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                val text = cm.primaryClip?.getItemAt(0)?.text?.toString()?.trim()
+                clipboardUrl = if (text != null && (text.startsWith("http://") || text.startsWith("https://"))) text else null
+            }
+
+            var showChooseSourceDialog by remember { mutableStateOf(false) }
+
             CleanCopyTheme {
                 CleanCopyApp(
                     selectedTab = selectedTab,
                     history = history,
+                    clipboardUrl = clipboardUrl,
                     historyEnabled = historyEnabled,
                     rewriteFilename = rewriteFilename,
                     compressVideo = compressVideo,
                     selectedHistory = selectedHistory,
                     linkCleaningEnabled = linkCleaningEnabled,
                     onTabSelected = { selectedTab = it },
-                     onCleanCurrentClipboard = { openCleanCurrentClipboard() },
-                     onCopyMedia = { openCleanMedia(outputMode = CleanMediaActivity.OUTPUT_COPY) },
-                     onSaveMedia = { openCleanMedia(outputMode = CleanMediaActivity.OUTPUT_SAVE) },
+                    onCleanCurrentClipboard = { openCleanCurrentClipboard() },
+                    onChooseSourceToClean = { showChooseSourceDialog = true },
                     onHistorySelected = { selectedHistoryId = it.id },
                     onHistoryBack = { selectedHistoryId = null },
                     onOpenHistoryMedia = { openHistoryMedia(it) },
@@ -93,12 +103,20 @@ class MainActivity : ComponentActivity() {
                         compressVideo = it
                         VideoCompressionStore.setEnabled(this@MainActivity, it)
                     },
-                     onLinkCleaningEnabledChanged = {
-                         linkCleaningEnabled = it
-                         LinkCleanupStore.setEnabled(this@MainActivity, it)
-                     },
-                     onAddQuickSettingsTile = { addQuickSettingsTile() }
+                    onLinkCleaningEnabledChanged = {
+                        linkCleaningEnabled = it
+                        LinkCleanupStore.setEnabled(this@MainActivity, it)
+                    },
+                    onAddQuickSettingsTile = { addQuickSettingsTile() }
                 )
+
+                if (showChooseSourceDialog) {
+                    ChooseSourceDialog(
+                        onDismiss = { showChooseSourceDialog = false },
+                        onChooseMedia = { openCleanMedia(outputMode = CleanMediaActivity.OUTPUT_COPY) },
+                        onCleanUrl = { url -> openCleanCustomUrl(url) }
+                    )
+                }
             }
         }
     }
@@ -112,6 +130,13 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         recreate()
+    }
+
+    private fun openCleanCustomUrl(url: String) {
+        startActivity(
+            Intent(this, CleanClipboardActivity::class.java)
+                .putExtra(CleanClipboardActivity.EXTRA_INPUT_TEXT, url)
+        )
     }
 
     private fun openCleanMedia(outputMode: String) {

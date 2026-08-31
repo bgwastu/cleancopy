@@ -23,28 +23,32 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.ContentPaste
 import androidx.compose.material.icons.outlined.ContentPasteSearch
+import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Movie
-import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -65,6 +69,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
@@ -90,6 +95,7 @@ import java.util.Date
 fun CleanCopyApp(
     selectedTab: Int,
     history: List<ClipboardHistoryEntry>,
+    clipboardUrl: String?,
     historyEnabled: Boolean,
     rewriteFilename: Boolean,
     compressVideo: Boolean,
@@ -97,8 +103,7 @@ fun CleanCopyApp(
     linkCleaningEnabled: Boolean,
     onTabSelected: (Int) -> Unit,
     onCleanCurrentClipboard: () -> Unit,
-    onCopyMedia: () -> Unit,
-    onSaveMedia: () -> Unit,
+    onChooseSourceToClean: () -> Unit,
     onHistorySelected: (ClipboardHistoryEntry) -> Unit,
     onHistoryBack: () -> Unit,
     onOpenHistoryMedia: (ClipboardHistoryEntry) -> Unit,
@@ -114,18 +119,25 @@ fun CleanCopyApp(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        when {
-                            selectedTab == 1 -> "Settings"
-                            selectedHistory != null -> "History detail"
-                            else -> "CleanCopy"
+                    when {
+                        selectedTab == 1 -> Text("Settings")
+                        selectedHistory != null -> Text("History detail")
+                        else -> Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                painterResource(R.drawable.ic_clean_copy_mark),
+                                contentDescription = null,
+                                modifier = Modifier.size(28.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text("CleanCopy", fontWeight = FontWeight.SemiBold)
                         }
-                    )
+                    }
                 },
                 navigationIcon = if (selectedHistory != null && selectedTab == 0) {
                     {
                         IconButton(onClick = onHistoryBack) {
-                            Icon(Icons.Outlined.ArrowBack, contentDescription = "Back")
+                            Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
                         }
                     }
                 } else {
@@ -137,7 +149,7 @@ fun CleanCopyApp(
                             Icon(Icons.Outlined.ContentCopy, contentDescription = "Copy media")
                         }
                         IconButton(onClick = { onOpenHistoryMedia(selectedHistory) }) {
-                            Icon(Icons.Outlined.OpenInNew, contentDescription = "Open media")
+                            Icon(Icons.AutoMirrored.Outlined.OpenInNew, contentDescription = "Open media")
                         }
                     }
                 }
@@ -167,9 +179,9 @@ fun CleanCopyApp(
                 ClipboardPage(
                     modifier = Modifier.padding(padding),
                     history = history,
-                     onCleanCurrentClipboard = onCleanCurrentClipboard,
-                    onCopyMedia = onCopyMedia,
-                    onSaveMedia = onSaveMedia,
+                    clipboardUrl = clipboardUrl,
+                    onCleanCurrentClipboard = onCleanCurrentClipboard,
+                    onChooseSourceToClean = onChooseSourceToClean,
                     onHistorySelected = onHistorySelected
                 )
             } else {
@@ -199,9 +211,9 @@ fun CleanCopyApp(
 private fun ClipboardPage(
     modifier: Modifier,
     history: List<ClipboardHistoryEntry>,
+    clipboardUrl: String?,
     onCleanCurrentClipboard: () -> Unit,
-    onCopyMedia: () -> Unit,
-    onSaveMedia: () -> Unit,
+    onChooseSourceToClean: () -> Unit,
     onHistorySelected: (ClipboardHistoryEntry) -> Unit
 ) {
     val pagedHistory = remember(history) {
@@ -218,40 +230,60 @@ private fun ClipboardPage(
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // Quick Action Buttons
         item {
             Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Icon(
-                    Icons.Outlined.ContentPasteSearch,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.height(42.dp).width(42.dp)
-                )
-                Text(
-                    "Remove location and other identifying metadata before you paste or save it.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Button(onClick = onCleanCurrentClipboard, modifier = Modifier.fillMaxWidth()) {
-                    Icon(painterResource(R.drawable.ic_clean_copy_mark), contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Clean current clipboard")
+                Button(
+                    onClick = onCleanCurrentClipboard,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(if (clipboardUrl != null) 68.dp else 52.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Start,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(painterResource(R.drawable.ic_clean_copy_mark), contentDescription = null, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(10.dp))
+                        Column(horizontalAlignment = Alignment.Start) {
+                            Text("Clean current clipboard", style = MaterialTheme.typography.labelLarge)
+                            if (clipboardUrl != null) {
+                                val displayUrl = if (clipboardUrl.length > 40) clipboardUrl.take(37) + "…" else clipboardUrl
+                                Text(
+                                    displayUrl,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.75f)
+                                )
+                            }
+                        }
+                    }
                 }
-                Button(onClick = onCopyMedia, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Outlined.ContentCopy, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Choose media & copy")
-                }
-                Button(onClick = onSaveMedia, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Outlined.Save, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Choose media & save")
+
+                FilledTonalButton(
+                    onClick = onChooseSourceToClean,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Start,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Outlined.Image, contentDescription = null, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(10.dp))
+                        Text("Choose media / URL & clean", style = MaterialTheme.typography.labelLarge)
+                    }
                 }
             }
         }
@@ -474,7 +506,7 @@ private fun MetadataBlock(
                         )
                         Text(field.value, style = MaterialTheme.typography.bodyMedium)
                     }
-                    if (index != fields.lastIndex) Divider()
+                    if (index != fields.lastIndex) HorizontalDivider()
                 }
             }
         }
@@ -483,37 +515,88 @@ private fun MetadataBlock(
 
 @Composable
 private fun HistoryRow(entry: ClipboardHistoryEntry, onClick: () -> Unit) {
-    Column(
+    Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 4.dp)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(18.dp),
+        colors = androidx.compose.material3.CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.5f)
+        )
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                when (entry.kind) {
-                    MediaKind.IMAGE -> Icons.Outlined.Image
-                    MediaKind.VIDEO -> Icons.Outlined.Movie
-                    MediaKind.LINK -> Icons.Outlined.Link
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = when (entry.kind) {
+                    MediaKind.IMAGE -> MaterialTheme.colorScheme.primaryContainer
+                    MediaKind.VIDEO -> MaterialTheme.colorScheme.tertiaryContainer
+                    MediaKind.LINK -> MaterialTheme.colorScheme.secondaryContainer
                 },
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary
-            )
-            Spacer(Modifier.width(12.dp))
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Text(entry.sourceName, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(
-                    "${formatMediaKind(entry.kind)}  |  ${historyStatus(entry)}  |  ${formatTime(entry.capturedAt)}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                modifier = Modifier.size(42.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = when (entry.kind) {
+                            MediaKind.IMAGE -> Icons.Outlined.Image
+                            MediaKind.VIDEO -> Icons.Outlined.Movie
+                            MediaKind.LINK -> Icons.Outlined.Link
+                        },
+                        contentDescription = null,
+                        tint = when (entry.kind) {
+                            MediaKind.IMAGE -> MaterialTheme.colorScheme.onPrimaryContainer
+                            MediaKind.VIDEO -> MaterialTheme.colorScheme.onTertiaryContainer
+                            MediaKind.LINK -> MaterialTheme.colorScheme.onSecondaryContainer
+                        },
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
             }
+
+            Spacer(Modifier.width(14.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = entry.sourceName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(2.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = historyStatus(entry),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "•",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = formatTime(entry.capturedAt),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Icon(
+                Icons.AutoMirrored.Outlined.ArrowForward,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                modifier = Modifier.size(18.dp)
+            )
         }
-        Spacer(Modifier.height(12.dp))
-        Divider()
     }
 }
 
@@ -550,8 +633,8 @@ private fun SettingsPage(
         Text("Output", style = MaterialTheme.typography.headlineSmall)
         SettingSwitch(
             icon = Icons.Outlined.ContentCopy,
-            title = "Rewrite filename",
-            supporting = "Saved as {counter}.{ext}; the first file is 0.ext",
+            title = "Sanitize filename",
+            supporting = "Always strips timestamps and camera data from filenames into clean indexed names",
             checked = rewriteFilename,
             onCheckedChange = onRewriteFilenameChanged
         )

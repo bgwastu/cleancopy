@@ -97,7 +97,11 @@ object VideoSanitizer {
                     info.offset = 0
                     info.size = sampleSize
                     info.presentationTimeUs = extractor.sampleTime.coerceAtLeast(0L)
-                    info.flags = extractor.sampleFlags
+                    info.flags = if ((extractor.sampleFlags and MediaExtractor.SAMPLE_FLAG_SYNC) != 0) {
+                        MediaCodec.BUFFER_FLAG_KEY_FRAME
+                    } else {
+                        0
+                    }
                     muxer.writeSampleData(muxTracks[trackPosition], buffer, info)
                     val localProgress = info.presentationTimeUs.coerceIn(0L, duration)
                     onProgress(((completedDuration + localProgress).toFloat() / totalDuration).coerceIn(0f, 0.98f))
