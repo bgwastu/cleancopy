@@ -4,14 +4,8 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.Image as ComposeImage
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,37 +15,37 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
-import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Link
-import androidx.compose.material.icons.outlined.LocationOff
 import androidx.compose.material.icons.outlined.Movie
 import androidx.compose.material.icons.outlined.Share
-import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.BottomSheetDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -61,23 +55,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.FileDownload
-import androidx.compose.material.icons.outlined.OpenInBrowser
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.IconButton
 
@@ -87,6 +75,7 @@ data class CleanResultData(
     val kind: MediaKind = MediaKind.IMAGE,
     val primaryUri: Uri? = null,
     val cleanedText: String? = null,
+    val originalText: String? = null,
     val sourceName: String = "",
     val removedCount: Int = 0,
     val removedDetails: List<String> = emptyList(),
@@ -95,136 +84,192 @@ data class CleanResultData(
     val historyId: Long? = null
 )
 
+data class CleanResultMediaItem(
+    val uri: Uri,
+    val sourceName: String,
+    val kind: MediaKind,
+    val cleanedDetails: List<String> = emptyList(),
+    val wasAlreadyClean: Boolean = false
+)
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CleanResultModal(
     result: CleanResultData,
     onDismiss: () -> Unit,
     onCopyToClipboard: () -> Unit,
+    mediaItems: List<CleanResultMediaItem> = emptyList(),
+    onCopyMedia: ((index: Int, allItems: Boolean) -> Unit)? = null,
+    onSaveAndCopyMedia: ((index: Int, allItems: Boolean) -> Unit)? = null,
+    onSaveAndCopy: (() -> Unit)? = null,
     onSaveToDownloads: (() -> Unit)? = null,
     onOpenInBrowser: (() -> Unit)? = null,
     onShare: (() -> Unit)? = null,
     onViewHistory: ((Long) -> Unit)? = null
 ) {
-    Dialog(
+    var currentMediaIndex by remember(mediaItems) { mutableIntStateOf(0) }
+    var allMediaSelected by remember(mediaItems) { mutableStateOf(false) }
+    val hasMultipleMedia = mediaItems.size > 1
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val headerSubtitle = when {
+        hasMultipleMedia -> "${mediaItems.size} media items ready"
+        result.kind == MediaKind.LINK -> result.subtitle
+        else -> mediaItems.firstOrNull()?.sourceName ?: result.sourceName
+    }
+    val headerIcon = when (result.kind) {
+        MediaKind.IMAGE -> Icons.Outlined.Image
+        MediaKind.VIDEO -> Icons.Outlined.Movie
+        MediaKind.LINK -> Icons.Outlined.Link
+    }
+
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            dismissOnBackPress = true,
-            dismissOnClickOutside = true,
-            usePlatformDefaultWidth = false
-        )
+        sheetState = sheetState,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        containerColor = MaterialTheme.colorScheme.surface,
+        dragHandle = { BottomSheetDefaults.DragHandle() }
     ) {
-        Box(
+        Column(
             modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.55f))
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = onDismiss
-                ),
-            contentAlignment = Alignment.BottomCenter
+                .fillMaxWidth()
+                .heightIn(max = 680.dp)
+                .navigationBarsPadding()
+                .padding(start = 24.dp, end = 24.dp, bottom = 16.dp)
+                .verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 680.dp)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = {}
-                    ),
-                shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 16.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp, vertical = 20.dp)
-                        .verticalScroll(rememberScrollState()),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.size(44.dp)
                 ) {
-                    // Drag Handle Indicator
-                    Box(
-                        modifier = Modifier
-                            .width(40.dp)
-                            .height(4.dp)
-                            .clip(RoundedCornerShape(2.dp))
-                            .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = headerIcon,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+                Spacer(Modifier.width(12.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = result.title,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
                     )
+                    if (headerSubtitle.isNotBlank()) {
+                        Text(
+                            text = headerSubtitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
 
-                    // Header Row with Icon, Title, and Close
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(16.dp),
-                            color = if (result.kind == MediaKind.LINK) MaterialTheme.colorScheme.primaryContainer
-                                    else if (result.wasAlreadyClean) MaterialTheme.colorScheme.secondaryContainer
-                                    else MaterialTheme.colorScheme.primaryContainer,
-                            modifier = Modifier.size(48.dp)
+                IconButton(onClick = onDismiss) {
+                    Icon(Icons.Outlined.Close, contentDescription = "Close", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                    // Preview Content (Image / Video / Link)
+                    if (hasMultipleMedia) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = if (result.kind == MediaKind.LINK) Icons.Outlined.Link
-                                    else if (result.wasAlreadyClean) Icons.Outlined.Shield
-                                    else Icons.Outlined.Check,
-                                    contentDescription = null,
-                                    tint = if (result.kind == MediaKind.LINK) MaterialTheme.colorScheme.onPrimaryContainer
-                                    else if (result.wasAlreadyClean) MaterialTheme.colorScheme.onSecondaryContainer
-                                    else MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(26.dp)
-                                )
+                            IconButton(
+                                onClick = { currentMediaIndex-- },
+                                enabled = currentMediaIndex > 0
+                            ) {
+                                Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Previous media")
                             }
-                        }
-
-                        Spacer(Modifier.width(16.dp))
-
-                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = result.title,
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold
+                                "${currentMediaIndex + 1} of ${mediaItems.size}",
+                                style = MaterialTheme.typography.labelLarge
                             )
-                            Text(
-                                text = result.subtitle,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-
-                        IconButton(onClick = onDismiss) {
-                            Icon(Icons.Outlined.Close, contentDescription = "Close", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            IconButton(
+                                onClick = { currentMediaIndex++ },
+                                enabled = currentMediaIndex < mediaItems.lastIndex
+                            ) {
+                                Icon(Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = "Next media")
+                            }
                         }
                     }
 
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    ResultPreview(
+                        result = result,
+                        mediaItem = mediaItems.getOrNull(currentMediaIndex),
+                        compact = hasMultipleMedia
+                    )
 
-                    // Preview Content (Image / Video / Link)
-                    ResultPreview(result)
-
-                    // Scrubbed Items / Details Card
-                    ScrubbedDetailsCard(result)
-
-                    Spacer(Modifier.height(4.dp))
+                    mediaItems.getOrNull(currentMediaIndex)?.let { mediaItem ->
+                        MediaCleanupSummary(mediaItem)
+                    }
 
                     // Action Buttons tailored for Link vs Media
                     Column(
                         modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        // 1. Copy to Clipboard (Primary)
+                        if (hasMultipleMedia) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                if (!allMediaSelected) {
+                                    Button(
+                                        onClick = { allMediaSelected = false },
+                                        modifier = Modifier.weight(1f).height(44.dp),
+                                        shape = RoundedCornerShape(14.dp)
+                                    ) { Text("Current item") }
+                                } else {
+                                    OutlinedButton(
+                                        onClick = { allMediaSelected = false },
+                                        modifier = Modifier.weight(1f).height(44.dp),
+                                        shape = RoundedCornerShape(14.dp)
+                                    ) { Text("Current item") }
+                                }
+                                if (allMediaSelected) {
+                                    Button(
+                                        onClick = { allMediaSelected = true },
+                                        modifier = Modifier.weight(1f).height(44.dp),
+                                        shape = RoundedCornerShape(14.dp)
+                                    ) { Text("All ${mediaItems.size} items") }
+                                } else {
+                                    OutlinedButton(
+                                        onClick = { allMediaSelected = true },
+                                        modifier = Modifier.weight(1f).height(44.dp),
+                                        shape = RoundedCornerShape(14.dp)
+                                    ) { Text("All ${mediaItems.size} items") }
+                                }
+                            }
+                        }
+
+                        // Copy is always explicit; cleaning never changes the clipboard on its own.
                         Button(
                             onClick = {
-                                onCopyToClipboard()
+                                if (result.kind != MediaKind.LINK && onCopyMedia != null) {
+                                    onCopyMedia(currentMediaIndex, allMediaSelected)
+                                } else {
+                                    onCopyToClipboard()
+                                }
                             },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(52.dp),
+                                .height(48.dp),
                             shape = RoundedCornerShape(16.dp),
                             colors = androidx.compose.material3.ButtonDefaults.buttonColors(
                                 containerColor = MaterialTheme.colorScheme.primary,
@@ -233,10 +278,18 @@ fun CleanResultModal(
                         ) {
                             Icon(Icons.Outlined.ContentCopy, contentDescription = null, modifier = Modifier.size(20.dp))
                             Spacer(Modifier.width(10.dp))
-                            Text("Copy to Clipboard", style = MaterialTheme.typography.labelLarge)
+                            Text(
+                                when {
+                                    result.kind == MediaKind.LINK -> "Copy to Clipboard"
+                                    allMediaSelected -> "Copy all"
+                                    hasMultipleMedia -> "Copy current"
+                                    else -> "Copy only"
+                                },
+                                style = MaterialTheme.typography.labelLarge
+                            )
                         }
 
-                        // 2. Save to Downloads (for Image/Video) or Open in Browser (for Link)
+                        // Media can be persisted and copied as one action.
                         if (result.kind == MediaKind.LINK) {
                             if (onOpenInBrowser != null) {
                                 FilledTonalButton(
@@ -250,6 +303,31 @@ fun CleanResultModal(
                                     Spacer(Modifier.width(10.dp))
                                     Text("Open in Browser", style = MaterialTheme.typography.labelLarge)
                                 }
+                            }
+                        } else if (onSaveAndCopyMedia != null || onSaveAndCopy != null) {
+                            FilledTonalButton(
+                                onClick = {
+                                    if (onSaveAndCopyMedia != null) {
+                                        onSaveAndCopyMedia(currentMediaIndex, allMediaSelected)
+                                    } else {
+                                        onSaveAndCopy?.invoke()
+                                    }
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp),
+                                shape = RoundedCornerShape(16.dp)
+                            ) {
+                                Icon(Icons.Outlined.FileDownload, contentDescription = null, modifier = Modifier.size(20.dp))
+                                Spacer(Modifier.width(10.dp))
+                                Text(
+                                    when {
+                                        allMediaSelected -> "Save all & copy"
+                                        hasMultipleMedia -> "Save current & copy"
+                                        else -> "Save & Copy"
+                                    },
+                                    style = MaterialTheme.typography.labelLarge
+                                )
                             }
                         } else if (onSaveToDownloads != null) {
                             FilledTonalButton(
@@ -295,20 +373,52 @@ fun CleanResultModal(
                             }
                         }
                     }
-                }
-            }
         }
     }
 }
 
 @Composable
-private fun ResultPreview(result: CleanResultData) {
-    val context = LocalContext.current
+private fun MediaCleanupSummary(mediaItem: CleanResultMediaItem) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            Text(
+                text = "What was cleaned",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = if (mediaItem.wasAlreadyClean || mediaItem.cleanedDetails.isEmpty()) {
+                    "No removable metadata found"
+                } else {
+                    mediaItem.cleanedDetails.joinToString("  •  ")
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
 
-    when (result.kind) {
+@Composable
+private fun ResultPreview(result: CleanResultData, mediaItem: CleanResultMediaItem?, compact: Boolean) {
+    val context = LocalContext.current
+    val kind = mediaItem?.kind ?: result.kind
+    val primaryUri = mediaItem?.uri ?: result.primaryUri
+    val sourceName = mediaItem?.sourceName ?: result.sourceName
+
+    when (kind) {
         MediaKind.IMAGE -> {
-            val bitmap by produceState<Bitmap?>(initialValue = null, result.primaryUri) {
-                value = result.primaryUri?.let { uri ->
+            val bitmap by produceState<Bitmap?>(initialValue = null, primaryUri) {
+                value = primaryUri?.let { uri ->
                     withContext(Dispatchers.IO) {
                         decodeThumb(context, uri)
                     }
@@ -318,7 +428,7 @@ private fun ResultPreview(result: CleanResultData) {
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(160.dp),
+                        .height(if (compact) 120.dp else 160.dp),
                     shape = RoundedCornerShape(16.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant
                 ) {
@@ -331,7 +441,7 @@ private fun ResultPreview(result: CleanResultData) {
                             .padding(6.dp)
                     )
                 }
-            } else if (result.sourceName.isNotBlank()) {
+            } else if (sourceName.isNotBlank()) {
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
@@ -344,7 +454,7 @@ private fun ResultPreview(result: CleanResultData) {
                         Icon(Icons.Outlined.Image, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                         Spacer(Modifier.width(10.dp))
                         Text(
-                            result.sourceName,
+                            sourceName,
                             style = MaterialTheme.typography.bodyMedium,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -366,7 +476,7 @@ private fun ResultPreview(result: CleanResultData) {
                     Icon(Icons.Outlined.Movie, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.width(10.dp))
                     Text(
-                        result.sourceName.ifBlank { "Cleaned video" },
+                        sourceName.ifBlank { "Cleaned video" },
                         style = MaterialTheme.typography.bodyMedium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -375,110 +485,36 @@ private fun ResultPreview(result: CleanResultData) {
             }
         }
         MediaKind.LINK -> {
-            val text = result.cleanedText ?: result.sourceName
-            if (text.isNotBlank()) {
+            val before = result.originalText ?: result.sourceName
+            val after = result.cleanedText ?: before
+            if (after.isNotBlank()) {
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant
                 ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                Icons.Outlined.Link,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(16.dp)
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        if (before.isNotBlank()) {
+                            Text("Before", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                before,
+                                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                                maxLines = 3,
+                                overflow = TextOverflow.Ellipsis
                             )
-                            Spacer(Modifier.width(6.dp))
-                            Text("Cleaned Link", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                         }
-                        Spacer(Modifier.height(4.dp))
+                        Text("After", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                         Text(
-                            text,
+                            after,
                             style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                             maxLines = 3,
                             overflow = TextOverflow.Ellipsis
                         )
                     }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ScrubbedDetailsCard(result: CleanResultData) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
-    ) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                "Security & Privacy",
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            if (result.wasAlreadyClean) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Outlined.Shield,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.secondary,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        "Already clean — No tracking or metadata found",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-            } else if (result.removedDetails.isNotEmpty()) {
-                result.removedDetails.forEach { detail ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            Icons.Outlined.Check,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(detail, style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-            } else if (result.removedCount > 0) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Outlined.Check,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        "${result.removedCount} metadata field(s) scrubbed",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-            } else {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Outlined.Check,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        "Metadata and tracking removed",
-                        style = MaterialTheme.typography.bodySmall
-                    )
                 }
             }
         }

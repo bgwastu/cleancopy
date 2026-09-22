@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -47,7 +48,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
-import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -62,19 +62,12 @@ class CleanMediaActivity : ComponentActivity() {
     private var processingJob: Job? = null
     private var progressState by mutableStateOf(ProcessingState())
     private var completionData by mutableStateOf<CleanResultData?>(null)
-    private var cleanedUris: List<Uri> = emptyList()
+    private var preparedMedia: List<PreparedMedia> = emptyList()
+    private var activeSessionDirectory: File? = null
 
-    private val saveToLibrary by lazy {
-        intent.getBooleanExtra(EXTRA_SAVE_TO_LIBRARY, false)
-    }
     private val currentClipboard by lazy {
         intent.getBooleanExtra(EXTRA_CURRENT_CLIPBOARD, false)
     }
-    private val copyToClipboardAfterSave by lazy {
-        intent.getStringExtra(EXTRA_OUTPUT_MODE) == OUTPUT_COPY
-    }
-    private var destinationTreeUri: Uri? = null
-    private var pendingUris: List<Uri> = emptyList()
     private var clipboardMimeType: String? = null
 
     private val picker = registerForActivityResult(
@@ -107,22 +100,24 @@ class CleanMediaActivity : ComponentActivity() {
                 if (completionData != null) {
                     CleanResultModal(
                         result = completionData!!,
-                        onDismiss = { finish() },
-                        onCopyToClipboard = {
-                            val firstMime = completionData?.primaryUri?.let { contentResolver.getType(it) }
-                            ClipboardHelper.copyMedia(
-                                context = this@CleanMediaActivity,
-                                uris = cleanedUris,
-                                mimeType = firstMime
+                        onDismiss = ::discardAndFinish,
+                        onCopyToClipboard = { copySelection(0, false) },
+                        mediaItems = preparedMedia.map { media ->
+                            CleanResultMediaItem(
+                                uri = media.uri,
+                                sourceName = media.displayName,
+                                kind = media.kind,
+                                cleanedDetails = mediaCleanupDetails(
+                                    before = media.before,
+                                    after = media.after,
+                                    outputName = media.displayName,
+                                    wasSanitized = media.wasSanitized
+                                ),
+                                wasAlreadyClean = !media.wasSanitized && media.before.displayName == media.displayName
                             )
-                            Toast.makeText(this@CleanMediaActivity, "Copied to clipboard", Toast.LENGTH_SHORT).show()
-                            finish()
                         },
-                        onSaveToDownloads = {
-                            saveCleanedMediaToDownloads()
-                        },
-                        onShare = { shareMedia(cleanedUris) },
-                        onViewHistory = { id -> openHistory(id) }
+                        onCopyMedia = ::copySelection,
+                        onSaveAndCopyMedia = ::saveAndCopySelection
                     )
                 } else {
                     ProcessingOverlay(progressState, ::cancelProcessing)
@@ -187,13 +182,14 @@ class CleanMediaActivity : ComponentActivity() {
     }
 
     private fun process(uris: List<Uri>) {
-        Log.i(TAG, "Processing ${uris.size} selected media item(s), save=$saveToLibrary")
+        Log.i(TAG, "Processing ${uris.size} selected media item(s)")
         progressState = ProcessingState(
             isProcessing = true,
             totalItems = uris.size,
             status = "Preparing clean copies..."
         )
         val sessionDirectory = File(cacheDir, "clipboard/${System.currentTimeMillis()}").apply { mkdirs() }
+        activeSessionDirectory = sessionDirectory
 
         processingJob = lifecycleScope.launch {
             try {
@@ -271,37 +267,7 @@ class CleanMediaActivity : ComponentActivity() {
                 }
 
                 val finalMedia = prepared
-                cleanedUris = finalMedia.map { it.uri }
-                val firstMime = finalMedia.firstOrNull()?.mimeType
-
-                // Automatically copy to clipboard when opened for copy/clipboard
-                if (!saveToLibrary || copyToClipboardAfterSave) {
-                    ClipboardHelper.copyMedia(
-                        context = this@CleanMediaActivity,
-                        uris = cleanedUris,
-                        mimeType = firstMime
-                    )
-                }
-
-                // If launched with Save mode requested upfront, save directly to Downloads
-                if (saveToLibrary) {
-                    saveCleanedMediaToDownloads()
-                }
-
-                val historyEntries = finalMedia.map { media ->
-                    ClipboardHistoryEntry(
-                        id = System.currentTimeMillis(),
-                        clipboardUri = media.uri.toString(),
-                        sourceName = media.before.displayName,
-                        kind = media.kind,
-                        capturedAt = System.currentTimeMillis(),
-                        before = media.before.fields,
-                        after = media.after.fields
-                    )
-                }
-                historyEntries.forEach { entry ->
-                    ClipboardHistoryStore.record(this@CleanMediaActivity, entry)
-                }
+                preparedMedia = finalMedia
 
                 val firstItem = finalMedia.first()
                 val removedDetails = buildList {
@@ -317,22 +283,14 @@ class CleanMediaActivity : ComponentActivity() {
                 progressState = progressState.copy(isProcessing = false)
 
                 completionData = CleanResultData(
-                    title = if (allAlreadyClean) "Media Verified Clean" else "Media Cleaned",
-                    subtitle = if (saveToLibrary) {
-                        "${finalMedia.size} item(s) saved to Downloads"
-                    } else if (finalMedia.size == 1) {
-                        "${formatMediaKind(firstItem.kind)} cleaned & ready"
-                    } else {
-                        "${finalMedia.size} media items cleaned & ready"
-                    },
+                    title = "Cleaned",
+                    subtitle = "",
                     kind = firstItem.kind,
                     primaryUri = firstItem.uri,
                     sourceName = firstItem.displayName,
                     removedCount = totalRemovedMetadata,
                     removedDetails = removedDetails,
-                    wasAlreadyClean = allAlreadyClean,
-                    isSaved = saveToLibrary,
-                    historyId = historyEntries.firstOrNull()?.id
+                    wasAlreadyClean = allAlreadyClean
                 )
             } catch (error: Throwable) {
                 if (error is CancellationException) {
@@ -351,15 +309,6 @@ class CleanMediaActivity : ComponentActivity() {
                 finish()
             }
         }
-    }
-
-    private fun openHistory(historyId: Long) {
-        startActivity(
-            Intent(this, MainActivity::class.java)
-                .putExtra(MainActivity.EXTRA_HISTORY_ID, historyId)
-                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-        )
-        finish()
     }
 
     private fun snapshotClipboardUris(uris: List<Uri>, sessionDirectory: File): List<Uri> {
@@ -404,50 +353,93 @@ class CleanMediaActivity : ComponentActivity() {
         else -> null
     }
 
-    private fun shareMedia(uris: List<Uri>) {
-        if (uris.isEmpty()) return
-        val share = if (uris.size == 1) {
-            Intent(Intent.ACTION_SEND).apply {
-                type = contentResolver.getType(uris.first()) ?: "*/*"
-                putExtra(Intent.EXTRA_STREAM, uris.first())
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                clipData = ClipData.newUri(contentResolver, "CleanCopy clean media", uris.first())
-            }
-        } else {
-            Intent(Intent.ACTION_SEND_MULTIPLE).apply {
-                type = "*/*"
-                putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                clipData = ClipData.newUri(contentResolver, "CleanCopy clean media", uris.first()).also { clip ->
-                    uris.drop(1).forEach { clip.addItem(ClipData.Item(it)) }
-                }
-            }
+    private fun copySelection(index: Int, allItems: Boolean) {
+        val selected = selectedMedia(index, allItems)
+        if (selected.isEmpty()) return
+        val uris = selected.map { it.uri }
+        val copied = ClipboardHelper.copyMedia(
+            context = this,
+            uris = uris,
+            mimeType = selected.first().mimeType
+        )
+        if (!copied) {
+            Toast.makeText(this, "Could not copy the cleaned media", Toast.LENGTH_SHORT).show()
+            return
         }
-        startActivity(Intent.createChooser(share, "Share cleaned media"))
+        recordHistory(selected, uris)
+        Toast.makeText(this, "Copied to clipboard", Toast.LENGTH_SHORT).show()
+        finish()
     }
 
-    private fun saveCleanedMediaToDownloads() {
-        if (cleanedUris.isEmpty()) return
-        var savedCount = 0
-        cleanedUris.forEachIndexed { index, uri ->
-            val mime = contentResolver.getType(uri) ?: "application/octet-stream"
-            val ext = extensionForMime(mime) ?: "bin"
-            val saveName = "cleancopy_${System.currentTimeMillis()}_$index.$ext"
-            val saveResult = DownloadsSaver.saveToDownloads(
+    private fun saveAndCopySelection(index: Int, allItems: Boolean) {
+        val selected = selectedMedia(index, allItems)
+        if (selected.isEmpty()) return
+        val savedUris = mutableListOf<Uri>()
+        for ((saveIndex, media) in selected.withIndex()) {
+            val fallbackExtension = extensionForMime(media.mimeType) ?: "bin"
+            val displayName = media.displayName.takeIf { it.contains('.') }
+                ?: "cleancopy_${System.currentTimeMillis()}_$saveIndex.$fallbackExtension"
+            val saved = DownloadsSaver.saveToDownloads(
                 context = this,
-                sourceUri = uri,
-                displayName = saveName,
-                mimeType = mime
+                sourceUri = media.uri,
+                displayName = displayName,
+                mimeType = media.mimeType
             )
-            if (saveResult.isSuccess) {
-                savedCount++
+            if (saved.isFailure) {
+                savedUris.forEach(::deleteSavedUri)
+                Toast.makeText(this, "Could not save all items to Downloads", Toast.LENGTH_LONG).show()
+                return
             }
+            savedUris += saved.getOrThrow()
         }
-        if (savedCount > 0) {
-            Toast.makeText(this, "Saved $savedCount item(s) to Downloads", Toast.LENGTH_SHORT).show()
-        } else {
-            Toast.makeText(this, "Could not save to Downloads", Toast.LENGTH_SHORT).show()
+
+        val copied = ClipboardHelper.copyMedia(
+            context = this,
+            uris = savedUris,
+            mimeType = selected.first().mimeType
+        )
+        if (!copied) {
+            savedUris.forEach(::deleteSavedUri)
+            Toast.makeText(this, "Could not save and copy the cleaned media", Toast.LENGTH_LONG).show()
+            return
         }
+        recordHistory(selected, savedUris)
+        activeSessionDirectory?.deleteRecursively()
+        Toast.makeText(this, "Saved to Downloads and copied", Toast.LENGTH_SHORT).show()
+        finish()
+    }
+
+    private fun selectedMedia(index: Int, allItems: Boolean): List<PreparedMedia> =
+        if (allItems) preparedMedia else listOfNotNull(preparedMedia.getOrNull(index))
+
+    private fun recordHistory(mediaItems: List<PreparedMedia>, resultUris: List<Uri>) {
+        val capturedAt = System.currentTimeMillis()
+        mediaItems.zip(resultUris).forEachIndexed { index, (media, uri) ->
+            ClipboardHistoryStore.record(
+                this,
+                ClipboardHistoryEntry(
+                    id = capturedAt + index,
+                    clipboardUri = uri.toString(),
+                    sourceName = media.before.displayName,
+                    kind = media.kind,
+                    capturedAt = capturedAt,
+                    before = media.before.fields,
+                    after = media.after.fields
+                )
+            )
+        }
+    }
+
+    private fun deleteSavedUri(uri: Uri) {
+        runCatching {
+            if (uri.scheme == "file") File(requireNotNull(uri.path)).delete()
+            else contentResolver.delete(uri, null, null)
+        }
+    }
+
+    private fun discardAndFinish() {
+        activeSessionDirectory?.deleteRecursively()
+        finish()
     }
 
     private fun outputUri(output: SanitizedMedia) = FileProvider.getUriForFile(
@@ -470,13 +462,8 @@ class CleanMediaActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_DEBUG_PATH = "net.wastu.cleancopy.extra.CLEAN_DEBUG_PATH"
-        const val EXTRA_SAVE_TO_LIBRARY = "net.wastu.cleancopy.extra.SAVE_TO_LIBRARY"
         const val EXTRA_CURRENT_CLIPBOARD = "net.wastu.cleancopy.extra.CURRENT_CLIPBOARD"
         const val EXTRA_INPUT_URIS = "net.wastu.cleancopy.extra.INPUT_URIS"
-        const val EXTRA_OUTPUT_MODE = "net.wastu.cleancopy.extra.OUTPUT_MODE"
-        const val EXTRA_PROGRESS_TOAST = "net.wastu.cleancopy.extra.PROGRESS_TOAST"
-        const val OUTPUT_COPY = "copy"
-        const val OUTPUT_SAVE = "save"
         private const val TAG = "CleanCopyCleanMedia"
     }
 }
@@ -522,6 +509,7 @@ private fun ProcessingOverlay(state: ProcessingState, onCancel: () -> Unit) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .navigationBarsPadding()
                         .padding(horizontal = 24.dp, vertical = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally

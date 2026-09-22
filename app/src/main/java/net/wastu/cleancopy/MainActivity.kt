@@ -24,9 +24,11 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import net.wastu.cleancopy.clipboard.CleanCopyDefaultTileService
 
 class MainActivity : ComponentActivity() {
     private var resumeTick by mutableIntStateOf(0)
+    private var quickSettingsPromptDismissed by mutableStateOf(false)
     private val openedFromTileSettings by lazy {
         intent.action == "android.service.quicksettings.action.QS_TILE_PREFERENCES" ||
             intent.getBooleanExtra(EXTRA_TILE_SETTINGS, false)
@@ -34,6 +36,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        quickSettingsPromptDismissed = QuickSettingsPromptStore.isDismissed(this)
         refreshLinkRules()
         setContent {
              var selectedTab by rememberSaveable {
@@ -82,6 +85,7 @@ class MainActivity : ComponentActivity() {
                     compressVideo = compressVideo,
                     selectedHistory = selectedHistory,
                     linkCleaningEnabled = linkCleaningEnabled,
+                    quickSettingsPromptDismissed = quickSettingsPromptDismissed,
                     onTabSelected = { selectedTab = it },
                     onCleanCurrentClipboard = { openCleanCurrentClipboard() },
                     onChooseSourceToClean = { showChooseSourceDialog = true },
@@ -107,13 +111,17 @@ class MainActivity : ComponentActivity() {
                         linkCleaningEnabled = it
                         LinkCleanupStore.setEnabled(this@MainActivity, it)
                     },
-                    onAddQuickSettingsTile = { addQuickSettingsTile() }
+                    onAddQuickSettingsTile = { addQuickSettingsTile() },
+                    onDismissQuickSettingsPrompt = {
+                        QuickSettingsPromptStore.dismiss(this@MainActivity)
+                        quickSettingsPromptDismissed = true
+                    }
                 )
 
                 if (showChooseSourceDialog) {
                     ChooseSourceDialog(
                         onDismiss = { showChooseSourceDialog = false },
-                        onChooseMedia = { openCleanMedia(outputMode = CleanMediaActivity.OUTPUT_COPY) },
+                        onChooseMedia = { openCleanMedia() },
                         onCleanUrl = { url -> openCleanCustomUrl(url) }
                     )
                 }
@@ -139,12 +147,8 @@ class MainActivity : ComponentActivity() {
         )
     }
 
-    private fun openCleanMedia(outputMode: String) {
-        startActivity(
-            Intent(this, CleanMediaActivity::class.java)
-                .putExtra(CleanMediaActivity.EXTRA_SAVE_TO_LIBRARY, outputMode == CleanMediaActivity.OUTPUT_SAVE)
-                .putExtra(CleanMediaActivity.EXTRA_OUTPUT_MODE, outputMode)
-        )
+    private fun openCleanMedia() {
+        startActivity(Intent(this, CleanMediaActivity::class.java))
     }
 
     private fun openCleanCurrentClipboard() {
@@ -153,18 +157,32 @@ class MainActivity : ComponentActivity() {
 
     private fun addQuickSettingsTile() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-            Toast.makeText(this, "Open Quick Settings, tap the pencil, and add CleanCopy", Toast.LENGTH_LONG).show()
+            runCatching { startActivity(Intent("android.settings.QUICK_SETTINGS_SETTINGS")) }
+            Toast.makeText(this, "In Quick Settings, tap Edit and add CleanCopy", Toast.LENGTH_LONG).show()
             return
         }
-        getSystemService(StatusBarManager::class.java).requestAddTileService(
-            ComponentName(this, "${BuildConfig.APPLICATION_ID}.clipboard.CleanCopyDefaultTileService"),
-            getString(R.string.tile_cleancopy),
-            Icon.createWithResource(this, R.drawable.ic_clean_copy_mark),
-            mainExecutor
-        ) { result ->
-            if (result != StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED) {
-                Toast.makeText(this, "CleanCopy was not added to Quick Settings", Toast.LENGTH_SHORT).show()
+        runCatching {
+            getSystemService(StatusBarManager::class.java).requestAddTileService(
+                ComponentName(this, CleanCopyDefaultTileService::class.java),
+                getString(R.string.tile_cleancopy),
+                Icon.createWithResource(this, R.drawable.ic_clean_copy_mark),
+                mainExecutor
+            ) { result ->
+                when (result) {
+                    StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED -> {
+                        Toast.makeText(this, "CleanCopy added to Quick Settings", Toast.LENGTH_SHORT).show()
+                    }
+                    StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ALREADY_ADDED -> {
+                        Toast.makeText(this, "CleanCopy is already in Quick Settings", Toast.LENGTH_SHORT).show()
+                    }
+                    StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_NOT_ADDED -> {
+                        Toast.makeText(this, "CleanCopy was not added", Toast.LENGTH_SHORT).show()
+                    }
+                    else -> Toast.makeText(this, "Could not open the Quick Settings request", Toast.LENGTH_SHORT).show()
+                }
             }
+        }.onFailure {
+            Toast.makeText(this, "Could not open the Quick Settings request", Toast.LENGTH_SHORT).show()
         }
     }
 

@@ -1,8 +1,16 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
+val releaseVersion = "1.4.0"
 val gitVersionName = providers.exec {
     commandLine("git", "describe", "--tags", "--always", "--dirty")
-}.standardOutput.asText.map { "1.2.0-${it.trim().removePrefix("v")}" }
+}.standardOutput.asText.map { output ->
+    val description = output.trim()
+    if (description == "v$releaseVersion") {
+        releaseVersion
+    } else {
+        "$releaseVersion-${description.removePrefix("v")}"
+    }
+}
 
 val gitVersionCode = providers.exec {
     commandLine("git", "rev-list", "--count", "HEAD")

@@ -30,6 +30,7 @@ import java.util.Locale
 class CleanClipboardActivity : ComponentActivity() {
     private var started = false
     private var completionData by mutableStateOf<CleanResultData?>(null)
+    private var pendingLinkResult: LinkBatchResult? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -47,8 +48,14 @@ class CleanClipboardActivity : ComponentActivity() {
                             onDismiss = { finish() },
                             onCopyToClipboard = {
                                 data.cleanedText?.let { text ->
-                                    ClipboardHelper.copyText(this@CleanClipboardActivity, text, "CleanCopy clean links")
-                                    Toast.makeText(this@CleanClipboardActivity, "Link copied to clipboard", Toast.LENGTH_SHORT).show()
+                                    val copied = ClipboardHelper.copyText(this@CleanClipboardActivity, text, "CleanCopy clean links")
+                                    if (copied) {
+                                        pendingLinkResult?.let { recordCleanedLinks(this@CleanClipboardActivity, it) }
+                                        Toast.makeText(this@CleanClipboardActivity, "Link copied to clipboard", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        Toast.makeText(this@CleanClipboardActivity, "Could not copy the link", Toast.LENGTH_SHORT).show()
+                                        return@CleanResultModal
+                                    }
                                 }
                                 finish()
                             },
@@ -125,7 +132,6 @@ class CleanClipboardActivity : ComponentActivity() {
                     finish()
                 } else {
                     val mediaIntent = Intent(this@CleanClipboardActivity, CleanMediaActivity::class.java).apply {
-                        putExtra(CleanMediaActivity.EXTRA_SAVE_TO_LIBRARY, false)
                         putExtra(CleanMediaActivity.EXTRA_CURRENT_CLIPBOARD, true)
                         putStringArrayListExtra(
                             CleanMediaActivity.EXTRA_INPUT_URIS,
@@ -158,7 +164,7 @@ class CleanClipboardActivity : ComponentActivity() {
                     resolver = NetworkRedirectResolver::resolve
                 )
             }
-            val historyEntry = recordCleanedLinks(this@CleanClipboardActivity, result)
+            pendingLinkResult = result
 
             val count = result.links.count { it.changed }
             val removedParams = result.links.flatMap { it.removedParameters }.distinct()
@@ -177,11 +183,11 @@ class CleanClipboardActivity : ComponentActivity() {
                 subtitle = if (count > 0) "$count tracking parameter(s) removed" else "No tracking parameters found",
                 kind = MediaKind.LINK,
                 cleanedText = result.text,
+                originalText = text,
                 sourceName = text.take(60),
                 removedCount = count,
                 removedDetails = details,
-                wasAlreadyClean = count == 0,
-                historyId = historyEntry?.id
+                wasAlreadyClean = count == 0
             )
         }
     }

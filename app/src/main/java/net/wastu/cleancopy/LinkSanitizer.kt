@@ -75,6 +75,12 @@ object LinkSanitizer {
 
     fun containsLink(text: String): Boolean = urlPattern.matcher(text).find()
 
+    fun firstLink(text: String): String? {
+        val match = urlPattern.matcher(text)
+        if (!match.find()) return null
+        return match.group().trimEnd { it in trailingPunctuation }
+    }
+
     fun cleanText(
         input: String,
         providers: List<LinkRuleProvider>,

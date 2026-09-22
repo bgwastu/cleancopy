@@ -7,6 +7,14 @@ import org.junit.Test
 
 class LinkSanitizerTest {
     @Test
+    fun findsFirstClipboardUrlWithoutTrailingPunctuation() {
+        assertEquals(
+            "https://example.com/item?utm_source=share",
+            LinkSanitizer.firstLink("Open https://example.com/item?utm_source=share, then continue.")
+        )
+    }
+
+    @Test
     fun removesGlobalTrackingParametersAndPreservesDuplicates() {
         val result = LinkSanitizer.cleanUrl(
             "https://example.com/article?id=1&utm_source=newsletter&id=2&fbclid=secret#read",

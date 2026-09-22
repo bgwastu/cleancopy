@@ -1,6 +1,5 @@
 package net.wastu.cleancopy
 
-import android.content.ClipData
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -17,6 +16,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -47,13 +47,15 @@ import java.io.File
 
 /**
  * Handles incoming share intents directly from other apps (images, videos, links, text),
- * scrubs identifying metadata/tracking parameters, copies the clean result to the clipboard,
- * records it to History, and displays a rich completion modal.
+ * scrubs identifying metadata/tracking parameters and asks what to do with the result.
  */
 class ShareReceiverActivity : ComponentActivity() {
 
     private var processingJob: Job? = null
     private var uiState by mutableStateOf<ShareUiState>(ShareUiState.Idle)
+    private var preparedMedia: List<PreparedMediaItem> = emptyList()
+    private var activeSessionDirectory: File? = null
+    private var pendingLinkResult: LinkBatchResult? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -62,35 +64,32 @@ class ShareReceiverActivity : ComponentActivity() {
             CleanCopyTheme {
                 ShareContent(
                     state = uiState,
-                    onDismiss = { finish() },
+                    mediaItems = preparedMedia.map { media ->
+                        CleanResultMediaItem(
+                            uri = media.uri,
+                            sourceName = media.displayName,
+                            kind = media.kind,
+                            cleanedDetails = mediaCleanupDetails(
+                                before = media.before,
+                                after = media.after,
+                                outputName = media.displayName,
+                                wasSanitized = media.wasSanitized
+                            ),
+                            wasAlreadyClean = !media.wasSanitized && media.before.displayName == media.displayName
+                        )
+                    },
+                    onDismiss = ::discardAndFinish,
                     onCancel = {
                         processingJob?.cancel()
                         finish()
                     },
-                    onCopyToClipboard = { result ->
-                        if (result.kind == MediaKind.LINK) {
-                            result.cleanedText?.let { text ->
-                                ClipboardHelper.copyText(this@ShareReceiverActivity, text, "CleanCopy clean links")
-                                Toast.makeText(this@ShareReceiverActivity, "Link copied to clipboard", Toast.LENGTH_SHORT).show()
-                            }
-                        } else {
-                            result.primaryUri?.let { uri ->
-                                val mime = if (result.kind == MediaKind.IMAGE) "image/*" else "video/*"
-                                ClipboardHelper.copyMedia(this@ShareReceiverActivity, listOf(uri), mimeType = mime)
-                                Toast.makeText(this@ShareReceiverActivity, "Copied to clipboard", Toast.LENGTH_SHORT).show()
-                            }
-                        }
-                        finish()
-                    },
-                    onSaveToDownloads = { uri, mimeType ->
-                        saveMediaToDownloads(uri, mimeType)
-                    },
+                    onCopyToClipboard = ::copyCompletedResult,
+                    onCopyMedia = ::copyMediaSelection,
+                    onSaveAndCopyMedia = ::saveAndCopyMediaSelection,
                     onOpenInBrowser = { url ->
                         openInBrowser(url)
                     },
-                    onShareMedia = { uri, mimeType -> shareMedia(uri, mimeType) },
-                    onShareText = { text -> shareText(text) },
-                    onViewHistory = { historyId -> openHistoryDetail(historyId) }
+                    onShareText = { text -> shareText(text) }
                 )
             }
         }
@@ -98,22 +97,100 @@ class ShareReceiverActivity : ComponentActivity() {
         processIncomingShare()
     }
 
-    private fun saveMediaToDownloads(uri: Uri, mimeType: String) {
-        val ext = ClipboardHelper.extensionToMime(mimeType).let {
-            if (mimeType.startsWith("video/")) "mp4" else "jpg"
+    private fun copyCompletedResult(result: CleanResultData) {
+        val copied = if (result.kind == MediaKind.LINK) {
+            result.cleanedText?.let { text ->
+                ClipboardHelper.copyText(this, text, "CleanCopy clean links")
+            } ?: false
+        } else false
+
+        if (!copied) {
+            Toast.makeText(this, "Could not copy the cleaned result", Toast.LENGTH_SHORT).show()
+            return
         }
-        val saveName = "cleancopy_${System.currentTimeMillis()}.$ext"
-        val saveResult = DownloadsSaver.saveToDownloads(
+        pendingLinkResult?.let { recordCleanedLinks(this, it) }
+        Toast.makeText(this, "Copied to clipboard", Toast.LENGTH_SHORT).show()
+        finish()
+    }
+
+    private fun copyMediaSelection(index: Int, allItems: Boolean) {
+        val selected = selectedMedia(index, allItems)
+        if (selected.isEmpty()) return
+        val uris = selected.map { it.uri }
+        val copied = ClipboardHelper.copyMedia(this, uris, mimeType = selected.first().mimeType)
+        if (!copied) {
+            Toast.makeText(this, "Could not copy the cleaned media", Toast.LENGTH_SHORT).show()
+            return
+        }
+        recordMediaHistory(selected, uris)
+        Toast.makeText(this, "Copied to clipboard", Toast.LENGTH_SHORT).show()
+        finish()
+    }
+
+    private fun saveAndCopyMediaSelection(index: Int, allItems: Boolean) {
+        val selected = selectedMedia(index, allItems)
+        if (selected.isEmpty()) return
+        val savedUris = mutableListOf<Uri>()
+        for ((saveIndex, media) in selected.withIndex()) {
+            val extension = if (media.mimeType.startsWith("video/")) "mp4" else "jpg"
+            val displayName = media.displayName.takeIf { it.contains('.') }
+                ?: "cleancopy_${System.currentTimeMillis()}_$saveIndex.$extension"
+            val saved = DownloadsSaver.saveToDownloads(this, media.uri, displayName, media.mimeType)
+            if (saved.isFailure) {
+                savedUris.forEach(::deleteSavedUri)
+                Toast.makeText(this, "Could not save all items to Downloads", Toast.LENGTH_LONG).show()
+                return
+            }
+            savedUris += saved.getOrThrow()
+        }
+
+        val copied = ClipboardHelper.copyMedia(
             context = this,
-            sourceUri = uri,
-            displayName = saveName,
-            mimeType = mimeType
+            uris = savedUris,
+            mimeType = selected.first().mimeType
         )
-        if (saveResult.isSuccess) {
-            Toast.makeText(this, "Saved to Downloads", Toast.LENGTH_SHORT).show()
-        } else {
-            Toast.makeText(this, "Could not save to Downloads", Toast.LENGTH_SHORT).show()
+        if (!copied) {
+            savedUris.forEach(::deleteSavedUri)
+            Toast.makeText(this, "Could not save and copy the cleaned media", Toast.LENGTH_LONG).show()
+            return
         }
+        recordMediaHistory(selected, savedUris)
+        activeSessionDirectory?.deleteRecursively()
+        Toast.makeText(this, "Saved to Downloads and copied", Toast.LENGTH_SHORT).show()
+        finish()
+    }
+
+    private fun selectedMedia(index: Int, allItems: Boolean): List<PreparedMediaItem> =
+        if (allItems) preparedMedia else listOfNotNull(preparedMedia.getOrNull(index))
+
+    private fun recordMediaHistory(mediaItems: List<PreparedMediaItem>, resultUris: List<Uri>) {
+        val capturedAt = System.currentTimeMillis()
+        mediaItems.zip(resultUris).forEachIndexed { index, (media, uri) ->
+            ClipboardHistoryStore.record(
+                this,
+                ClipboardHistoryEntry(
+                    id = capturedAt + index,
+                    clipboardUri = uri.toString(),
+                    sourceName = media.before.displayName,
+                    kind = media.kind,
+                    capturedAt = capturedAt,
+                    before = media.before.fields,
+                    after = media.after.fields
+                )
+            )
+        }
+    }
+
+    private fun deleteSavedUri(uri: Uri) {
+        runCatching {
+            if (uri.scheme == "file") File(requireNotNull(uri.path)).delete()
+            else contentResolver.delete(uri, null, null)
+        }
+    }
+
+    private fun discardAndFinish() {
+        activeSessionDirectory?.deleteRecursively()
+        finish()
     }
 
     private fun openInBrowser(url: String) {
@@ -164,11 +241,7 @@ class ShareReceiverActivity : ComponentActivity() {
                     LinkBatchResult(rawText, emptyList())
                 }
 
-                // Copy to clipboard
-                ClipboardHelper.copyText(this@ShareReceiverActivity, result.text)
-
-                // Record to history if links were cleaned
-                val historyEntry = recordCleanedLinks(this@ShareReceiverActivity, result)
+                pendingLinkResult = result
 
                 val changedCount = result.links.count { it.changed }
                 val removedParams = result.links.flatMap { it.removedParameters }.distinct()
@@ -184,15 +257,15 @@ class ShareReceiverActivity : ComponentActivity() {
 
                 uiState = ShareUiState.Completed(
                     result = CleanResultData(
-                        title = "Cleaned & Copied!",
-                        subtitle = if (changedCount > 0) "$changedCount link(s) sanitized" else "Link copied to clipboard",
+                        title = if (changedCount > 0) "Link Cleaned" else "Link Checked",
+                        subtitle = if (changedCount > 0) "$changedCount link(s) sanitized" else "No tracking parameters found",
                         kind = MediaKind.LINK,
                         cleanedText = result.text,
+                        originalText = rawText,
                         sourceName = rawText.take(60),
                         removedCount = changedCount,
                         removedDetails = removedDetails,
-                        wasAlreadyClean = changedCount == 0,
-                        historyId = historyEntry?.id
+                        wasAlreadyClean = changedCount == 0
                     )
                 )
             } catch (error: Throwable) {
@@ -214,6 +287,7 @@ class ShareReceiverActivity : ComponentActivity() {
         )
 
         val sessionDirectory = File(cacheDir, "clipboard/${System.currentTimeMillis()}").apply { mkdirs() }
+        activeSessionDirectory = sessionDirectory
 
         processingJob = lifecycleScope.launch {
             try {
@@ -288,31 +362,7 @@ class ShareReceiverActivity : ComponentActivity() {
                     }
                 }
 
-                val finalUris = prepared.map { it.uri }
-                val firstMime = prepared.firstOrNull()?.mimeType
-
-                // Copy to clipboard with multi-MIME types
-                ClipboardHelper.copyMedia(
-                    context = this@ShareReceiverActivity,
-                    uris = finalUris,
-                    mimeType = firstMime
-                )
-
-                // Record to History
-                val historyEntries = prepared.map { media ->
-                    ClipboardHistoryEntry(
-                        id = System.currentTimeMillis(),
-                        clipboardUri = media.uri.toString(),
-                        sourceName = media.before.displayName,
-                        kind = media.kind,
-                        capturedAt = System.currentTimeMillis(),
-                        before = media.before.fields,
-                        after = media.after.fields
-                    )
-                }
-                historyEntries.forEach { entry ->
-                    ClipboardHistoryStore.record(this@ShareReceiverActivity, entry)
-                }
+                preparedMedia = prepared
 
                 val firstItem = prepared.first()
                 val removedDetails = buildList {
@@ -327,34 +377,27 @@ class ShareReceiverActivity : ComponentActivity() {
                 val allAlreadyClean = prepared.all { !it.wasSanitized }
                 uiState = ShareUiState.Completed(
                     result = CleanResultData(
-                        title = "Cleaned & Copied!",
-                        subtitle = if (total == 1) "${formatMediaKind(firstItem.kind)} ready to paste" else "$total media items ready to paste",
+                        title = "Cleaned",
+                        subtitle = "",
                         kind = firstItem.kind,
                         primaryUri = firstItem.uri,
                         sourceName = firstItem.displayName,
                         removedCount = totalRemovedMetadata,
                         removedDetails = removedDetails,
-                        wasAlreadyClean = allAlreadyClean,
-                        historyId = historyEntries.firstOrNull()?.id
+                        wasAlreadyClean = allAlreadyClean
                     )
                 )
             } catch (error: Throwable) {
-                if (error is CancellationException) return@launch
+                if (error is CancellationException) {
+                    sessionDirectory.deleteRecursively()
+                    return@launch
+                }
                 Log.e(TAG, "Failed to clean media", error)
+                sessionDirectory.deleteRecursively()
                 Toast.makeText(this@ShareReceiverActivity, error.message ?: "Failed to clean media", Toast.LENGTH_SHORT).show()
                 finish()
             }
         }
-    }
-
-    private fun shareMedia(uri: Uri, mimeType: String) {
-        val shareIntent = Intent(Intent.ACTION_SEND).apply {
-            type = mimeType
-            putExtra(Intent.EXTRA_STREAM, uri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            clipData = ClipData.newUri(contentResolver, "Cleaned media", uri)
-        }
-        startActivity(Intent.createChooser(shareIntent, "Share cleaned media"))
     }
 
     private fun shareText(text: String) {
@@ -363,15 +406,6 @@ class ShareReceiverActivity : ComponentActivity() {
             putExtra(Intent.EXTRA_TEXT, text)
         }
         startActivity(Intent.createChooser(shareIntent, "Share cleaned link"))
-    }
-
-    private fun openHistoryDetail(historyId: Long) {
-        startActivity(
-            Intent(this, MainActivity::class.java)
-                .putExtra(MainActivity.EXTRA_HISTORY_ID, historyId)
-                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-        )
-        finish()
     }
 
     companion object {
@@ -403,14 +437,14 @@ private data class PreparedMediaItem(
 @Composable
 private fun ShareContent(
     state: ShareUiState,
+    mediaItems: List<CleanResultMediaItem>,
     onDismiss: () -> Unit,
     onCancel: () -> Unit,
     onCopyToClipboard: (CleanResultData) -> Unit,
-    onSaveToDownloads: (Uri, String) -> Unit,
+    onCopyMedia: (Int, Boolean) -> Unit,
+    onSaveAndCopyMedia: (Int, Boolean) -> Unit,
     onOpenInBrowser: (String) -> Unit,
-    onShareMedia: (Uri, String) -> Unit,
-    onShareText: (String) -> Unit,
-    onViewHistory: (Long) -> Unit
+    onShareText: (String) -> Unit
 ) {
     when (state) {
         is ShareUiState.Idle -> {
@@ -428,30 +462,19 @@ private fun ShareContent(
                 onCopyToClipboard = {
                     onCopyToClipboard(state.result)
                 },
-                onSaveToDownloads = if (state.result.kind != MediaKind.LINK) {
-                    {
-                        state.result.primaryUri?.let { uri ->
-                            val mime = if (state.result.kind == MediaKind.IMAGE) "image/jpeg" else "video/mp4"
-                            onSaveToDownloads(uri, mime)
-                        }
-                    }
-                } else null,
+                mediaItems = mediaItems,
+                onCopyMedia = if (state.result.kind != MediaKind.LINK) onCopyMedia else null,
+                onSaveAndCopyMedia = if (state.result.kind != MediaKind.LINK) onSaveAndCopyMedia else null,
                 onOpenInBrowser = if (state.result.kind == MediaKind.LINK) {
                     {
                         state.result.cleanedText?.let(onOpenInBrowser)
                     }
                 } else null,
-                onShare = {
-                    if (state.result.kind == MediaKind.LINK) {
+                onShare = if (state.result.kind == MediaKind.LINK) {
+                    {
                         state.result.cleanedText?.let(onShareText)
-                    } else {
-                        state.result.primaryUri?.let { uri ->
-                            val mime = if (state.result.kind == MediaKind.IMAGE) "image/*" else "video/*"
-                            onShareMedia(uri, mime)
-                        }
                     }
-                },
-                onViewHistory = onViewHistory
+                } else null
             )
         }
     }
@@ -476,6 +499,7 @@ private fun ShareProcessingSheet(state: ShareUiState.Processing, onCancel: () ->
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .navigationBarsPadding()
                     .padding(horizontal = 24.dp, vertical = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally

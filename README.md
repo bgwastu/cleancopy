@@ -28,8 +28,8 @@ CleanCopy makes clean copies of images, videos, and links before you share them.
 
 - Removes identifying metadata from images and videos.
 - Cleans tracking parameters and redirect wrappers from links.
-- Copies cleaned media back to the clipboard, or saves it to a folder.
-- Adds optional Quick Settings tiles for fast access.
+- Lets you review cleaned media before copying it or saving it to Downloads.
+- Adds an optional Quick Settings tile for fast access.
 - Keeps an optional local history of cleaned items.
 
 ## Install
@@ -46,9 +46,10 @@ Obtainium watches the GitHub Releases page and can notify you when a new APK is 
 
 ## Use it
 
-1. Share an image or video to **Clean Media & Copy**, or add the CleanCopy Quick Settings tile.
-2. Choose where to save the cleaned media.
-3. CleanCopy removes supported metadata, saves the result, and copies it to the clipboard.
+1. Share an image or video to **Clean Media**, or add the CleanCopy Quick Settings tile.
+2. From the tile, choose **Camera**, **Choose photo or video**, or **Current clipboard**.
+3. CleanCopy removes supported metadata and shows the result without changing your clipboard.
+4. Choose **Copy only** or **Save & Copy**.
 
 Use **Clean current clipboard** when the media is already in your clipboard. Link cleaning is enabled from Settings.
 
