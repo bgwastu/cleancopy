@@ -49,7 +49,7 @@ Obtainium watches the GitHub Releases page and can notify you when a new APK is 
 1. Share an image or video to **Clean Media**, or add the CleanCopy Quick Settings tile.
 2. From the tile, choose **Camera**, **Choose photo or video**, or **Current clipboard**.
 3. CleanCopy removes supported metadata and shows the result without changing your clipboard.
-4. Choose **Copy only** or **Save & Copy**.
+4. Choose **Copy media** or **Save media & copy**. For several files, swipe the carousel and use **Save all** to write every cleaned copy to Downloads.
 
 Use **Clean current clipboard** when the media is already in your clipboard. Link cleaning is enabled from Settings.
 

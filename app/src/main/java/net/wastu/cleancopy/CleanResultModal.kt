@@ -4,13 +4,17 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Image as ComposeImage
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -19,23 +23,38 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.automirrored.outlined.ArrowForward
+import androidx.compose.material.icons.outlined.Badge
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.CleaningServices
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.DriveFileRenameOutline
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.Image
-import androidx.compose.material.icons.outlined.Link
+import androidx.compose.material.icons.outlined.LocationOff
 import androidx.compose.material.icons.outlined.Movie
+import androidx.compose.material.icons.outlined.PhotoCamera
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.BottomSheetDefaults
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
@@ -45,7 +64,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -53,21 +71,22 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.util.lerp
+import kotlin.math.absoluteValue
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.FileDownload
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.IconButton
+private val PreviewHeight = 200.dp
+private const val CollapsedCleanupRows = 3
 
 data class CleanResultData(
     val title: String = "Clean Result",
@@ -102,24 +121,20 @@ fun CleanResultModal(
     onCopyMedia: ((index: Int, allItems: Boolean) -> Unit)? = null,
     onSaveAndCopyMedia: ((index: Int, allItems: Boolean) -> Unit)? = null,
     onSaveAndCopy: (() -> Unit)? = null,
+    onSaveAllMedia: (() -> Unit)? = null,
     onSaveToDownloads: (() -> Unit)? = null,
     onOpenInBrowser: (() -> Unit)? = null,
     onShare: (() -> Unit)? = null,
     onViewHistory: ((Long) -> Unit)? = null
 ) {
-    var currentMediaIndex by remember(mediaItems) { mutableIntStateOf(0) }
-    var allMediaSelected by remember(mediaItems) { mutableStateOf(false) }
     val hasMultipleMedia = mediaItems.size > 1
+    val pagerState = rememberPagerState(pageCount = { mediaItems.size.coerceAtLeast(1) })
+    val currentMediaIndex = pagerState.currentPage.coerceIn(0, (mediaItems.size - 1).coerceAtLeast(0))
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val headerSubtitle = when {
-        hasMultipleMedia -> "${mediaItems.size} media items ready"
+        hasMultipleMedia -> "${mediaItems.size} media cleaned"
         result.kind == MediaKind.LINK -> result.subtitle
         else -> mediaItems.firstOrNull()?.sourceName ?: result.sourceName
-    }
-    val headerIcon = when (result.kind) {
-        MediaKind.IMAGE -> Icons.Outlined.Image
-        MediaKind.VIDEO -> Icons.Outlined.Movie
-        MediaKind.LINK -> Icons.Outlined.Link
     }
 
     ModalBottomSheet(
@@ -132,33 +147,18 @@ fun CleanResultModal(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(max = 680.dp)
+                .heightIn(max = 720.dp)
                 .navigationBarsPadding()
-                .padding(start = 24.dp, end = 24.dp, bottom = 16.dp)
-                .verticalScroll(rememberScrollState()),
+                .padding(bottom = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Surface(
-                    shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    modifier = Modifier.size(44.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = headerIcon,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                }
-                Spacer(Modifier.width(12.dp))
-
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = result.title,
@@ -181,235 +181,319 @@ fun CleanResultModal(
                 }
             }
 
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = 24.dp),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+            )
 
-                    // Preview Content (Image / Video / Link)
-                    if (hasMultipleMedia) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            IconButton(
-                                onClick = { currentMediaIndex-- },
-                                enabled = currentMediaIndex > 0
-                            ) {
-                                Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Previous media")
-                            }
-                            Text(
-                                "${currentMediaIndex + 1} of ${mediaItems.size}",
-                                style = MaterialTheme.typography.labelLarge
-                            )
-                            IconButton(
-                                onClick = { currentMediaIndex++ },
-                                enabled = currentMediaIndex < mediaItems.lastIndex
-                            ) {
-                                Icon(Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = "Next media")
-                            }
-                        }
-                    }
-
+            if (hasMultipleMedia) {
+                HorizontalPager(
+                    state = pagerState,
+                    contentPadding = PaddingValues(horizontal = 24.dp),
+                    pageSpacing = 10.dp,
+                    beyondViewportPageCount = 1,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(PreviewHeight)
+                ) { page ->
+                    val pageOffset = (
+                        (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
+                    ).absoluteValue
                     ResultPreview(
                         result = result,
-                        mediaItem = mediaItems.getOrNull(currentMediaIndex),
-                        compact = hasMultipleMedia
+                        mediaItem = mediaItems[page],
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .fillMaxHeight()
+                            .graphicsLayer {
+                                alpha = lerp(0.55f, 1f, 1f - pageOffset.coerceIn(0f, 1f))
+                                scaleY = lerp(0.94f, 1f, 1f - pageOffset.coerceIn(0f, 1f))
+                            }
                     )
+                }
 
-                    mediaItems.getOrNull(currentMediaIndex)?.let { mediaItem ->
-                        MediaCleanupSummary(mediaItem)
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Row(horizontalArrangement = Arrangement.Center) {
+                        repeat(mediaItems.size) { index ->
+                            val selected = index == currentMediaIndex
+                            Box(
+                                modifier = Modifier
+                                    .padding(horizontal = 3.dp)
+                                    .size(if (selected) 8.dp else 6.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        if (selected) {
+                                            MaterialTheme.colorScheme.primary
+                                        } else {
+                                            MaterialTheme.colorScheme.outlineVariant
+                                        }
+                                    )
+                            )
+                        }
+                    }
+                    Text(
+                        "${currentMediaIndex + 1} of ${mediaItems.size}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            } else {
+                ResultPreview(
+                    result = result,
+                    mediaItem = mediaItems.firstOrNull(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp)
+                        .then(
+                            if (result.kind == MediaKind.LINK) Modifier else Modifier.height(PreviewHeight)
+                        )
+                )
+            }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                mediaItems.getOrNull(currentMediaIndex)?.let { mediaItem ->
+                    MediaCleanupSummary(mediaItem)
+                }
+
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            if (result.kind != MediaKind.LINK && onCopyMedia != null) {
+                                onCopyMedia(currentMediaIndex, false)
+                            } else {
+                                onCopyToClipboard()
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        )
+                    ) {
+                        Icon(Icons.Outlined.ContentCopy, contentDescription = null, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            if (result.kind == MediaKind.LINK) "Copy to Clipboard" else "Copy media",
+                            style = MaterialTheme.typography.labelLarge
+                        )
                     }
 
-                    // Action Buttons tailored for Link vs Media
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        if (hasMultipleMedia) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    if (result.kind == MediaKind.LINK) {
+                        if (onOpenInBrowser != null) {
+                            FilledTonalButton(
+                                onClick = onOpenInBrowser,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(52.dp),
+                                shape = RoundedCornerShape(16.dp)
                             ) {
-                                if (!allMediaSelected) {
-                                    Button(
-                                        onClick = { allMediaSelected = false },
-                                        modifier = Modifier.weight(1f).height(44.dp),
-                                        shape = RoundedCornerShape(14.dp)
-                                    ) { Text("Current item") }
-                                } else {
-                                    OutlinedButton(
-                                        onClick = { allMediaSelected = false },
-                                        modifier = Modifier.weight(1f).height(44.dp),
-                                        shape = RoundedCornerShape(14.dp)
-                                    ) { Text("Current item") }
-                                }
-                                if (allMediaSelected) {
-                                    Button(
-                                        onClick = { allMediaSelected = true },
-                                        modifier = Modifier.weight(1f).height(44.dp),
-                                        shape = RoundedCornerShape(14.dp)
-                                    ) { Text("All ${mediaItems.size} items") }
-                                } else {
-                                    OutlinedButton(
-                                        onClick = { allMediaSelected = true },
-                                        modifier = Modifier.weight(1f).height(44.dp),
-                                        shape = RoundedCornerShape(14.dp)
-                                    ) { Text("All ${mediaItems.size} items") }
-                                }
+                                Icon(Icons.AutoMirrored.Outlined.OpenInNew, contentDescription = null, modifier = Modifier.size(20.dp))
+                                Spacer(Modifier.width(10.dp))
+                                Text("Open in Browser", style = MaterialTheme.typography.labelLarge)
                             }
                         }
-
-                        // Copy is always explicit; cleaning never changes the clipboard on its own.
-                        Button(
+                    } else if (onSaveAndCopyMedia != null || onSaveAndCopy != null) {
+                        FilledTonalButton(
                             onClick = {
-                                if (result.kind != MediaKind.LINK && onCopyMedia != null) {
-                                    onCopyMedia(currentMediaIndex, allMediaSelected)
+                                if (onSaveAndCopyMedia != null) {
+                                    onSaveAndCopyMedia(currentMediaIndex, false)
                                 } else {
-                                    onCopyToClipboard()
+                                    onSaveAndCopy?.invoke()
                                 }
                             },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(48.dp),
-                            shape = RoundedCornerShape(16.dp),
-                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary,
-                                contentColor = MaterialTheme.colorScheme.onPrimary
-                            )
+                            shape = RoundedCornerShape(16.dp)
                         ) {
-                            Icon(Icons.Outlined.ContentCopy, contentDescription = null, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Outlined.FileDownload, contentDescription = null, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(10.dp))
+                            Text("Save media & copy", style = MaterialTheme.typography.labelLarge)
+                        }
+                    } else if (onSaveToDownloads != null) {
+                        FilledTonalButton(
+                            onClick = onSaveToDownloads,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(52.dp),
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Icon(Icons.Outlined.FileDownload, contentDescription = null, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(10.dp))
+                            Text("Save to Downloads", style = MaterialTheme.typography.labelLarge)
+                        }
+                    }
+
+                    if (hasMultipleMedia && onSaveAllMedia != null) {
+                        OutlinedButton(
+                            onClick = onSaveAllMedia,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp),
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Icon(Icons.Outlined.FileDownload, contentDescription = null, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(10.dp))
+                            Text("Save all (${mediaItems.size}) media", style = MaterialTheme.typography.labelLarge)
+                        }
+                    }
+
+                    if (onShare != null) {
+                        OutlinedButton(
+                            onClick = onShare,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(52.dp),
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Icon(Icons.Outlined.Share, contentDescription = null, modifier = Modifier.size(20.dp))
                             Spacer(Modifier.width(10.dp))
                             Text(
-                                when {
-                                    result.kind == MediaKind.LINK -> "Copy to Clipboard"
-                                    allMediaSelected -> "Copy all"
-                                    hasMultipleMedia -> "Copy current"
-                                    else -> "Copy only"
-                                },
+                                if (result.kind == MediaKind.LINK) "Share Clean Link" else "Share Clean Media",
                                 style = MaterialTheme.typography.labelLarge
                             )
                         }
+                    }
 
-                        // Media can be persisted and copied as one action.
-                        if (result.kind == MediaKind.LINK) {
-                            if (onOpenInBrowser != null) {
-                                FilledTonalButton(
-                                    onClick = onOpenInBrowser,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(52.dp),
-                                    shape = RoundedCornerShape(16.dp)
-                                ) {
-                                    Icon(Icons.AutoMirrored.Outlined.OpenInNew, contentDescription = null, modifier = Modifier.size(20.dp))
-                                    Spacer(Modifier.width(10.dp))
-                                    Text("Open in Browser", style = MaterialTheme.typography.labelLarge)
-                                }
-                            }
-                        } else if (onSaveAndCopyMedia != null || onSaveAndCopy != null) {
-                            FilledTonalButton(
-                                onClick = {
-                                    if (onSaveAndCopyMedia != null) {
-                                        onSaveAndCopyMedia(currentMediaIndex, allMediaSelected)
-                                    } else {
-                                        onSaveAndCopy?.invoke()
-                                    }
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(48.dp),
-                                shape = RoundedCornerShape(16.dp)
-                            ) {
-                                Icon(Icons.Outlined.FileDownload, contentDescription = null, modifier = Modifier.size(20.dp))
-                                Spacer(Modifier.width(10.dp))
-                                Text(
-                                    when {
-                                        allMediaSelected -> "Save all & copy"
-                                        hasMultipleMedia -> "Save current & copy"
-                                        else -> "Save & Copy"
-                                    },
-                                    style = MaterialTheme.typography.labelLarge
-                                )
-                            }
-                        } else if (onSaveToDownloads != null) {
-                            FilledTonalButton(
-                                onClick = onSaveToDownloads,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(52.dp),
-                                    shape = RoundedCornerShape(16.dp)
-                            ) {
-                                Icon(Icons.Outlined.FileDownload, contentDescription = null, modifier = Modifier.size(20.dp))
-                                Spacer(Modifier.width(10.dp))
-                                Text("Save to Downloads", style = MaterialTheme.typography.labelLarge)
-                            }
-                        }
-
-                        // 3. Share Button
-                        if (onShare != null) {
-                            OutlinedButton(
-                                onClick = onShare,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(52.dp),
-                                shape = RoundedCornerShape(16.dp)
-                            ) {
-                                Icon(Icons.Outlined.Share, contentDescription = null, modifier = Modifier.size(20.dp))
-                                Spacer(Modifier.width(10.dp))
-                                Text(
-                                    if (result.kind == MediaKind.LINK) "Share Clean Link" else "Share Clean Media",
-                                    style = MaterialTheme.typography.labelLarge
-                                )
-                            }
-                        }
-
-                        // 4. Optional View History
-                        if (onViewHistory != null && result.historyId != null) {
-                            TextButton(
-                                onClick = { onViewHistory(result.historyId) },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Icon(Icons.AutoMirrored.Outlined.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text("View in CleanCopy", style = MaterialTheme.typography.labelMedium)
-                            }
+                    if (onViewHistory != null && result.historyId != null) {
+                        TextButton(
+                            onClick = { onViewHistory(result.historyId) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.AutoMirrored.Outlined.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("View in CleanCopy", style = MaterialTheme.typography.labelMedium)
                         }
                     }
+                }
+            }
         }
     }
 }
 
 @Composable
 private fun MediaCleanupSummary(mediaItem: CleanResultMediaItem) {
+    val alreadyClean = mediaItem.wasAlreadyClean || mediaItem.cleanedDetails.isEmpty()
+    val rows = if (alreadyClean) {
+        listOf("No removable metadata found")
+    } else {
+        mediaItem.cleanedDetails
+    }
+    val canCollapse = rows.size > CollapsedCleanupRows
+    var expanded by remember(mediaItem.uri) { mutableStateOf(false) }
+    val visibleRows = if (!canCollapse || expanded) rows else rows.take(CollapsedCleanupRows)
+
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(),
         shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)
     ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
-            verticalArrangement = Arrangement.spacedBy(3.dp)
-        ) {
-            Text(
-                text = "What was cleaned",
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                text = if (mediaItem.wasAlreadyClean || mediaItem.cleanedDetails.isEmpty()) {
-                    "No removable metadata found"
-                } else {
-                    mediaItem.cleanedDetails.joinToString("  •  ")
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis
-            )
+        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(
+                        if (canCollapse) {
+                            Modifier.clickable { expanded = !expanded }
+                        } else {
+                            Modifier
+                        }
+                    ),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "What was cleaned",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f)
+                )
+                if (canCollapse) {
+                    Icon(
+                        imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                        contentDescription = if (expanded) "Show less" else "Show more",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Column(
+                modifier = Modifier
+                    .padding(top = 8.dp)
+                    .then(
+                        if (expanded && rows.size > 6) {
+                            Modifier
+                                .heightIn(max = 240.dp)
+                                .verticalScroll(rememberScrollState())
+                        } else {
+                            Modifier
+                        }
+                    ),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                visibleRows.forEach { detail ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = cleanupIcon(detail, alreadyClean),
+                            contentDescription = null,
+                            tint = if (alreadyClean) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = detail,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
         }
     }
 }
 
+private fun cleanupIcon(detail: String, alreadyClean: Boolean): ImageVector {
+    if (alreadyClean) return Icons.Outlined.CheckCircle
+    val text = detail.lowercase()
+    return when {
+        "location" in text -> Icons.Outlined.LocationOff
+        "camera" in text -> Icons.Outlined.PhotoCamera
+        "date" in text || "timestamp" in text -> Icons.Outlined.Schedule
+        "label" in text || "creator" in text -> Icons.Outlined.Badge
+        "filename" in text -> Icons.Outlined.DriveFileRenameOutline
+        "embedded" in text || "scrubbed" in text -> Icons.Outlined.CleaningServices
+        else -> Icons.Outlined.Tune
+    }
+}
+
 @Composable
-private fun ResultPreview(result: CleanResultData, mediaItem: CleanResultMediaItem?, compact: Boolean) {
+private fun ResultPreview(
+    result: CleanResultData,
+    mediaItem: CleanResultMediaItem?,
+    modifier: Modifier = Modifier
+) {
     val context = LocalContext.current
     val kind = mediaItem?.kind ?: result.kind
     val primaryUri = mediaItem?.uri ?: result.primaryUri
@@ -426,15 +510,13 @@ private fun ResultPreview(result: CleanResultData, mediaItem: CleanResultMediaIt
             }
             if (bitmap != null) {
                 Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(if (compact) 120.dp else 160.dp),
+                    modifier = modifier,
                     shape = RoundedCornerShape(16.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant
                 ) {
                     ComposeImage(
                         bitmap = bitmap!!.asImageBitmap(),
-                        contentDescription = "Cleaned media preview",
+                        contentDescription = sourceName.ifBlank { "Cleaned media preview" },
                         contentScale = ContentScale.Fit,
                         modifier = Modifier
                             .fillMaxSize()
@@ -442,54 +524,26 @@ private fun ResultPreview(result: CleanResultData, mediaItem: CleanResultMediaIt
                     )
                 }
             } else if (sourceName.isNotBlank()) {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Outlined.Image, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        Spacer(Modifier.width(10.dp))
-                        Text(
-                            sourceName,
-                            style = MaterialTheme.typography.bodyMedium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
+                MediaPlaceholder(
+                    icon = Icons.Outlined.Image,
+                    label = sourceName,
+                    modifier = modifier
+                )
             }
         }
         MediaKind.VIDEO -> {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant
-            ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Outlined.Movie, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.width(10.dp))
-                    Text(
-                        sourceName.ifBlank { "Cleaned video" },
-                        style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
+            MediaPlaceholder(
+                icon = Icons.Outlined.Movie,
+                label = sourceName.ifBlank { "Cleaned video" },
+                modifier = modifier
+            )
         }
         MediaKind.LINK -> {
             val before = result.originalText ?: result.sourceName
             val after = result.cleanedText ?: before
             if (after.isNotBlank()) {
                 Surface(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant
                 ) {
@@ -517,6 +571,36 @@ private fun ResultPreview(result: CleanResultData, mediaItem: CleanResultMediaIt
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun MediaPlaceholder(
+    icon: ImageVector,
+    label: String,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.width(10.dp))
+            Text(
+                label,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }

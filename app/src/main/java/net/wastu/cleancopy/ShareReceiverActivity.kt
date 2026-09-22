@@ -86,6 +86,7 @@ class ShareReceiverActivity : ComponentActivity() {
                     onCopyToClipboard = ::copyCompletedResult,
                     onCopyMedia = ::copyMediaSelection,
                     onSaveAndCopyMedia = ::saveAndCopyMediaSelection,
+                    onSaveAllMedia = ::saveAllMedia,
                     onOpenInBrowser = { url ->
                         openInBrowser(url)
                     },
@@ -130,20 +131,7 @@ class ShareReceiverActivity : ComponentActivity() {
     private fun saveAndCopyMediaSelection(index: Int, allItems: Boolean) {
         val selected = selectedMedia(index, allItems)
         if (selected.isEmpty()) return
-        val savedUris = mutableListOf<Uri>()
-        for ((saveIndex, media) in selected.withIndex()) {
-            val extension = if (media.mimeType.startsWith("video/")) "mp4" else "jpg"
-            val displayName = media.displayName.takeIf { it.contains('.') }
-                ?: "cleancopy_${System.currentTimeMillis()}_$saveIndex.$extension"
-            val saved = DownloadsSaver.saveToDownloads(this, media.uri, displayName, media.mimeType)
-            if (saved.isFailure) {
-                savedUris.forEach(::deleteSavedUri)
-                Toast.makeText(this, "Could not save all items to Downloads", Toast.LENGTH_LONG).show()
-                return
-            }
-            savedUris += saved.getOrThrow()
-        }
-
+        val savedUris = saveMediaSelection(selected) ?: return
         val copied = ClipboardHelper.copyMedia(
             context = this,
             uris = savedUris,
@@ -158,6 +146,33 @@ class ShareReceiverActivity : ComponentActivity() {
         activeSessionDirectory?.deleteRecursively()
         Toast.makeText(this, "Saved to Downloads and copied", Toast.LENGTH_SHORT).show()
         finish()
+    }
+
+    private fun saveAllMedia() {
+        val selected = preparedMedia
+        if (selected.isEmpty()) return
+        val savedUris = saveMediaSelection(selected) ?: return
+        recordMediaHistory(selected, savedUris)
+        activeSessionDirectory?.deleteRecursively()
+        Toast.makeText(this, "Saved to Downloads", Toast.LENGTH_SHORT).show()
+        finish()
+    }
+
+    private fun saveMediaSelection(selected: List<PreparedMediaItem>): List<Uri>? {
+        val savedUris = mutableListOf<Uri>()
+        for ((saveIndex, media) in selected.withIndex()) {
+            val extension = if (media.mimeType.startsWith("video/")) "mp4" else "jpg"
+            val displayName = media.displayName.takeIf { it.contains('.') }
+                ?: "cleancopy_${System.currentTimeMillis()}_$saveIndex.$extension"
+            val saved = DownloadsSaver.saveToDownloads(this, media.uri, displayName, media.mimeType)
+            if (saved.isFailure) {
+                savedUris.forEach(::deleteSavedUri)
+                Toast.makeText(this, "Could not save all items to Downloads", Toast.LENGTH_LONG).show()
+                return null
+            }
+            savedUris += saved.getOrThrow()
+        }
+        return savedUris
     }
 
     private fun selectedMedia(index: Int, allItems: Boolean): List<PreparedMediaItem> =
@@ -377,7 +392,7 @@ class ShareReceiverActivity : ComponentActivity() {
                 val allAlreadyClean = prepared.all { !it.wasSanitized }
                 uiState = ShareUiState.Completed(
                     result = CleanResultData(
-                        title = "Cleaned",
+                        title = "Successfully cleaned!",
                         subtitle = "",
                         kind = firstItem.kind,
                         primaryUri = firstItem.uri,
@@ -443,6 +458,7 @@ private fun ShareContent(
     onCopyToClipboard: (CleanResultData) -> Unit,
     onCopyMedia: (Int, Boolean) -> Unit,
     onSaveAndCopyMedia: (Int, Boolean) -> Unit,
+    onSaveAllMedia: () -> Unit,
     onOpenInBrowser: (String) -> Unit,
     onShareText: (String) -> Unit
 ) {
@@ -465,6 +481,7 @@ private fun ShareContent(
                 mediaItems = mediaItems,
                 onCopyMedia = if (state.result.kind != MediaKind.LINK) onCopyMedia else null,
                 onSaveAndCopyMedia = if (state.result.kind != MediaKind.LINK) onSaveAndCopyMedia else null,
+                onSaveAllMedia = if (state.result.kind != MediaKind.LINK) onSaveAllMedia else null,
                 onOpenInBrowser = if (state.result.kind == MediaKind.LINK) {
                     {
                         state.result.cleanedText?.let(onOpenInBrowser)

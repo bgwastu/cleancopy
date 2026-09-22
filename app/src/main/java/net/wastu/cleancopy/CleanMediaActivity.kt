@@ -117,7 +117,8 @@ class CleanMediaActivity : ComponentActivity() {
                             )
                         },
                         onCopyMedia = ::copySelection,
-                        onSaveAndCopyMedia = ::saveAndCopySelection
+                        onSaveAndCopyMedia = ::saveAndCopySelection,
+                        onSaveAllMedia = if (preparedMedia.size > 1) ::saveAllMedia else null
                     )
                 } else {
                     ProcessingOverlay(progressState, ::cancelProcessing)
@@ -283,7 +284,7 @@ class CleanMediaActivity : ComponentActivity() {
                 progressState = progressState.copy(isProcessing = false)
 
                 completionData = CleanResultData(
-                    title = "Cleaned",
+                    title = "Successfully cleaned!",
                     subtitle = "",
                     kind = firstItem.kind,
                     primaryUri = firstItem.uri,
@@ -374,25 +375,7 @@ class CleanMediaActivity : ComponentActivity() {
     private fun saveAndCopySelection(index: Int, allItems: Boolean) {
         val selected = selectedMedia(index, allItems)
         if (selected.isEmpty()) return
-        val savedUris = mutableListOf<Uri>()
-        for ((saveIndex, media) in selected.withIndex()) {
-            val fallbackExtension = extensionForMime(media.mimeType) ?: "bin"
-            val displayName = media.displayName.takeIf { it.contains('.') }
-                ?: "cleancopy_${System.currentTimeMillis()}_$saveIndex.$fallbackExtension"
-            val saved = DownloadsSaver.saveToDownloads(
-                context = this,
-                sourceUri = media.uri,
-                displayName = displayName,
-                mimeType = media.mimeType
-            )
-            if (saved.isFailure) {
-                savedUris.forEach(::deleteSavedUri)
-                Toast.makeText(this, "Could not save all items to Downloads", Toast.LENGTH_LONG).show()
-                return
-            }
-            savedUris += saved.getOrThrow()
-        }
-
+        val savedUris = saveSelection(selected) ?: return
         val copied = ClipboardHelper.copyMedia(
             context = this,
             uris = savedUris,
@@ -407,6 +390,38 @@ class CleanMediaActivity : ComponentActivity() {
         activeSessionDirectory?.deleteRecursively()
         Toast.makeText(this, "Saved to Downloads and copied", Toast.LENGTH_SHORT).show()
         finish()
+    }
+
+    private fun saveAllMedia() {
+        val selected = preparedMedia
+        if (selected.isEmpty()) return
+        val savedUris = saveSelection(selected) ?: return
+        recordHistory(selected, savedUris)
+        activeSessionDirectory?.deleteRecursively()
+        Toast.makeText(this, "Saved to Downloads", Toast.LENGTH_SHORT).show()
+        finish()
+    }
+
+    private fun saveSelection(selected: List<PreparedMedia>): List<Uri>? {
+        val savedUris = mutableListOf<Uri>()
+        for ((saveIndex, media) in selected.withIndex()) {
+            val fallbackExtension = extensionForMime(media.mimeType) ?: "bin"
+            val displayName = media.displayName.takeIf { it.contains('.') }
+                ?: "cleancopy_${System.currentTimeMillis()}_$saveIndex.$fallbackExtension"
+            val saved = DownloadsSaver.saveToDownloads(
+                context = this,
+                sourceUri = media.uri,
+                displayName = displayName,
+                mimeType = media.mimeType
+            )
+            if (saved.isFailure) {
+                savedUris.forEach(::deleteSavedUri)
+                Toast.makeText(this, "Could not save all items to Downloads", Toast.LENGTH_LONG).show()
+                return null
+            }
+            savedUris += saved.getOrThrow()
+        }
+        return savedUris
     }
 
     private fun selectedMedia(index: Int, allItems: Boolean): List<PreparedMedia> =
