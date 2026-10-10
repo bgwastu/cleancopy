@@ -6,67 +6,32 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
-import java.io.File
 
 object DownloadsSaver {
-
-    /**
-     * Saves a media item directly into the device's public Downloads directory without launching SAF tree pickers.
-     * Uses MediaStore.Downloads with IS_PENDING flag on Android 10+ (API 29+), with graceful fallback for legacy versions.
-     */
-    fun saveToDownloads(
-        context: Context,
-        sourceUri: Uri,
-        displayName: String,
-        mimeType: String
-    ): Result<Uri> = runCatching {
+    /** Call from a worker dispatcher. Sharing remains available on Android 8–9. */
+    fun saveToDownloads(context: Context, sourceUri: Uri, displayName: String, mimeType: String): Result<Uri> = runCatching {
+        if (Build.VERSION.SDK_INT < 29) error("Use Share to save media on Android 8–9")
         val resolver = context.contentResolver
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val contentValues = ContentValues().apply {
-                put(MediaStore.MediaColumns.DISPLAY_NAME, displayName)
-                put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
-                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
-                put(MediaStore.MediaColumns.IS_PENDING, 1)
-            }
-            val collection = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
-            val destinationUri = resolver.insert(collection, contentValues)
-                ?: error("Failed to create download entry in MediaStore")
-
-            try {
-                resolver.openInputStream(sourceUri)?.use { input ->
-                    resolver.openOutputStream(destinationUri)?.use { output ->
-                        input.copyTo(output)
-                    } ?: error("Failed to open destination output stream")
-                } ?: error("Failed to read source cleaned file")
-
-                contentValues.clear()
-                contentValues.put(MediaStore.MediaColumns.IS_PENDING, 0)
-                resolver.update(destinationUri, contentValues, null, null)
-                destinationUri
-            } catch (error: Throwable) {
-                resolver.delete(destinationUri, null, null)
-                throw error
-            }
-        } else {
-            val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).apply {
-                mkdirs()
-            }
-            var targetFile = File(downloadsDir, displayName)
-            var counter = 1
-            val base = displayName.substringBeforeLast('.')
-            val ext = displayName.substringAfterLast('.', "")
-            while (targetFile.exists()) {
-                val nextName = if (ext.isNotBlank()) "${base}_$counter.$ext" else "${base}_$counter"
-                targetFile = File(downloadsDir, nextName)
-                counter++
-            }
-
-            resolver.openInputStream(sourceUri)?.use { input ->
-                targetFile.outputStream().use { output ->
-                    input.copyTo(output)
-                }
-            } ?: error("Failed to write to public Downloads directory")
-            Uri.fromFile(targetFile)
+        val values = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, displayName)
+            put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
+            put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+            put(MediaStore.MediaColumns.IS_PENDING, 1)
+        }
+        val destination = resolver.insert(MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), values)
+            ?: error("Could not create a download")
+        try {
+            val copied = resolver.openInputStream(sourceUri)?.use { input ->
+                resolver.openOutputStream(destination)?.use { output -> input.copyTo(output) }
+                    ?: error("Could not write the download")
+            } ?: error("The cleaned file is no longer available")
+            check(copied > 0) { "The cleaned file was empty" }
+            val published = ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }
+            check(resolver.update(destination, published, null, null) > 0) { "Could not finish saving the download" }
+            destination
+        } catch (failure: Exception) {
+            runCatching { resolver.delete(destination, null, null) }
+            throw failure
         }
     }
 }

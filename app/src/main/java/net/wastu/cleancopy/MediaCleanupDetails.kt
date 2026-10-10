@@ -38,14 +38,8 @@ fun mediaCleanupDetails(
         if (before.displayName != outputName) add("Original filename replaced")
 
         // The sanitizer also strips embedded tags that the lightweight inspector cannot expose.
-        if (isEmpty() && wasSanitized) {
-            add(
-                when (before.kind) {
-                    MediaKind.IMAGE -> "Embedded image metadata scrubbed"
-                    MediaKind.VIDEO -> "Video container metadata scrubbed"
-                    MediaKind.LINK -> "Embedded metadata scrubbed"
-                }
-            )
-        }
+        if (before.warning != null) add(before.warning)
+        if (after.warning != null) add("Output metadata verification was incomplete")
+        if (after.fields.isNotEmpty()) add("${after.fields.size} metadata fields remain")
     }
 }

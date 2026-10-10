@@ -11,30 +11,20 @@ import java.io.File
 
 data class SanitizedImage(
     val file: File,
-    val mimeType: String
+    val mimeType: String,
+    val metadataSectionsRemoved: Int = 0,
+    val notes: List<String> = emptyList()
 )
 
 data class SanitizedMedia(
     val file: File,
     val mimeType: String,
-    val kind: MediaKind
+    val kind: MediaKind,
+    val metadataSectionsRemoved: Int = 0,
+    val notes: List<String> = emptyList()
 )
 
 object ImageSanitizer {
-    private val removableTags = listOf(
-        "GPSLatitude", "GPSLatitudeRef", "GPSLongitude", "GPSLongitudeRef",
-        "GPSAltitude", "GPSAltitudeRef", "GPSTimeStamp", "GPSDateStamp",
-        "GPSProcessingMethod", "GPSAreaInformation", "GPSDestBearing",
-        "GPSDestDistance", "GPSDestLatitude", "GPSDestLatitudeRef",
-        "GPSDestLongitude", "GPSDestLongitudeRef", "GPSImgDirection",
-        "GPSImgDirectionRef", "GPSMapDatum", "GPSMeasureMode", "GPSSpeed",
-        "GPSSpeedRef", "GPSStatus", "GPSTrack", "GPSTrackRef", "GPSVersionID",
-        "DateTime", "DateTimeOriginal", "DateTimeDigitized", "Make", "Model",
-        "Software", "Artist", "Copyright", "UserComment", "ImageDescription",
-        "DocumentName", "HostComputer", "LensMake", "LensModel", "LensSerialNumber",
-        "BodySerialNumber", "CameraOwnerName", "ImageUniqueID", "Xmp"
-    )
-
     fun sanitize(
         context: Context,
         source: Uri,
@@ -59,22 +49,38 @@ object ImageSanitizer {
             }
             onProgress?.invoke(0.7f)
 
-            val motionPhoto = MotionPhotoDetector.isMotionPhoto(context, source)
-            val exif = ExifInterface(output)
-            removableTags.forEach { tag -> runCatching { exif.setAttribute(tag, null) } }
-            exif.saveAttributes()
-            if (extension == "jpg" && !motionPhoto) JpegMetadataScrubber.scrubXmp(output)
+            val originalExif = if (extension == "gif") null else runCatching { ExifInterface(output) }.getOrNull()
+            val orientation = originalExif?.getAttribute(ExifInterface.TAG_ORIENTATION)
+            val motionPhoto = originalExif?.getAttribute(ExifInterface.TAG_XMP)?.let { "MotionPhoto" in it || "MicroVideo" in it } == true
+            val removed = ImageMetadataScrubber.scrub(output, extension)
+            // Preserve only the rendering orientation, rebuilding a minimal EXIF block.
+            if (orientation != null && orientation != ExifInterface.ORIENTATION_NORMAL.toString()) {
+                ExifInterface(output).apply {
+                    setAttribute(ExifInterface.TAG_ORIENTATION, orientation)
+                    saveAttributes()
+                }
+            }
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(output.absolutePath, bounds)
+            check(bounds.outWidth > 0 && bounds.outHeight > 0) { "The cleaned image could not be decoded" }
             onProgress?.invoke(1f)
-            SanitizedImage(output, descriptor.mimeType)
+            SanitizedImage(output, descriptor.mimeType, removed, buildList {
+                if (descriptor.sourceMimeType in setOf("image/heic", "image/heif")) add("HEIC image converted to JPEG")
+                if (motionPhoto) add("Motion photo exported as a still image")
+            })
         } catch (error: Throwable) {
             output.delete()
+            if (error is OutOfMemoryError) throw IllegalStateException("This image is too large for the device's available memory")
             throw error
         }
     }
 
     private fun transcodeHeic(context: Context, source: Uri, output: File) {
         val bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            ImageDecoder.decodeBitmap(ImageDecoder.createSource(context.contentResolver, source)) { decoder, _, _ ->
+            ImageDecoder.decodeBitmap(ImageDecoder.createSource(context.contentResolver, source)) { decoder, info, _ ->
+                require(info.size.width.toLong() * info.size.height * 4 < Runtime.getRuntime().maxMemory() / 3) {
+                    "This HEIC image is too large for the device's available memory"
+                }
                 decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
             }
         } else {

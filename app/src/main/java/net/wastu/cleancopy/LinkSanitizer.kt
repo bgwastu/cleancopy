@@ -1,7 +1,6 @@
 package net.wastu.cleancopy
 
 import android.content.Context
-import android.net.Uri
 import android.util.Base64
 import org.json.JSONArray
 import org.json.JSONObject
@@ -37,7 +36,7 @@ data class LinkRuleProvider(
 )
 
 object LinkSanitizer {
-    private val urlPattern = Pattern.compile("https?://[^\\s<>()\\[\\]{}\\\"]+", Pattern.CASE_INSENSITIVE)
+    private val urlPattern = Pattern.compile("https?://[^\\s<>\\[\\]{}\\\"]+", Pattern.CASE_INSENSITIVE)
     private val trailingPunctuation = ".,;:!?"
     private val fallbackRules = listOf(
         "utm_.*",
@@ -46,39 +45,37 @@ object LinkSanitizer {
         "gclsrc",
         "dclid",
         "msclkid",
-        "mc_[a-z0-9_]+",
+        "mc_cid",
+        "mc_eid",
         "_ga",
         "_gl",
         "yclid",
         "twclid",
         "zanpid",
-        "igsh",
-        "igshid",
-        "si",
-        "rdid",
-        "share_url",
-        "mibextid",
-        "sfnsn",
-        "paipv",
-        "eav",
-        "extid",
-        "refsrc",
-        "ref_src",
-        "ref_url",
-        "tt_from",
-        "share_app_id",
-        "share_link_id",
-        "share_item_id",
         "_hsenc",
         "_hsmi"
     )
+    private val socialRules = listOf(
+        LinkRuleProvider("Facebook", "^https?://(?:[a-z]+\\.)?facebook\\.com/", rules = listOf("rdid", "share_url", "mibextid", "sfnsn", "paipv", "eav", "extid")),
+        LinkRuleProvider("Instagram", "^https?://(?:www\\.)?instagram\\.com/", rules = listOf("igsh", "igshid")),
+        LinkRuleProvider("YouTube", "^https?://(?:www\\.)?(?:youtube\\.com|youtu\\.be)/", rules = listOf("si")),
+        LinkRuleProvider("TikTok", "^https?://(?:[a-z]+\\.)?tiktok\\.com/", rules = listOf("_t", "_r", "tt_from", "share_app_id", "share_link_id", "share_item_id", "is_from_webapp", "sender_device", "sender_web_id"))
+    )
+
+    private fun trimUrl(raw: String): String {
+        var value = raw.trimEnd { it in trailingPunctuation }
+        while (value.endsWith(')') && value.count { it == ')' } > value.count { it == '(' }) {
+            value = value.dropLast(1).trimEnd { it in trailingPunctuation }
+        }
+        return value
+    }
 
     fun containsLink(text: String): Boolean = urlPattern.matcher(text).find()
 
     fun firstLink(text: String): String? {
         val match = urlPattern.matcher(text)
         if (!match.find()) return null
-        return match.group().trimEnd { it in trailingPunctuation }
+        return trimUrl(match.group())
     }
 
     fun cleanText(
@@ -91,14 +88,20 @@ object LinkSanitizer {
         val replacements = mutableListOf<Triple<Int, Int, LinkCleanResult>>()
         while (matches.find()) {
             val raw = matches.group()
-            val link = raw.trimEnd { it in trailingPunctuation }
+            val link = trimUrl(raw)
             if (link.isBlank()) continue
-            val resolved = resolver?.invoke(link)
-            val cleaned = cleanUrl(resolved?.cleaned ?: link, providers, removeReferrals)
+            val local = cleanUrl(link, providers, removeReferrals)
+            val resolved = resolver?.let { resolve ->
+                runCatching { resolve(local.cleaned) }.getOrElse {
+                    LinkCleanResult(link, local.cleaned, emptyList(), emptyList(), "Could not expand the shortened link")
+                }
+            }
+            val cleaned = cleanUrl(resolved?.cleaned ?: local.cleaned, providers, removeReferrals)
             val result = cleaned.copy(
                 original = link,
-                redirects = (resolved?.redirects.orEmpty() + cleaned.redirects),
-                error = resolved?.error ?: cleaned.error
+                removedParameters = local.removedParameters + resolved?.removedParameters.orEmpty() + cleaned.removedParameters,
+                redirects = local.redirects + resolved?.redirects.orEmpty() + cleaned.redirects,
+                error = local.error ?: resolved?.error ?: cleaned.error
             )
             replacements += Triple(matches.start(), matches.start() + link.length, result)
         }
@@ -115,10 +118,16 @@ object LinkSanitizer {
         }
 
         var current = input
-        val removed = linkedSetOf<String>()
+        val removed = mutableListOf<String>()
         val redirects = mutableListOf<String>()
+        val visited = mutableSetOf<String>()
         repeat(MAX_REDIRECT_HOPS) {
-            val matching = providers.filter { matches(it.urlPattern, current) }
+            if (!visited.add(current)) return LinkCleanResult(input, current, removed, redirects, "Redirect loop detected")
+            val matching = (providers + socialRules).filter { matches(it.urlPattern, current) }
+            // Exceptions and signed URLs must be checked before even the fallback rules.
+            if (matching.any { provider -> provider.exceptions.any { matches(it, current) } } || isSignedUrl(current)) {
+                return LinkCleanResult(input, current, removed, redirects)
+            }
             val redirect = matching.asSequence()
                 .filterNot { provider -> provider.exceptions.any { matches(it, current) } }
                 .flatMap { provider -> provider.redirections.asSequence().map { provider.name to it } }
@@ -152,23 +161,33 @@ object LinkSanitizer {
         return LinkCleanResult(input, current, removed.toList(), redirects, "Redirect chain limit reached")
     }
 
-    private fun stripParameters(url: String, rules: List<String>, removed: MutableSet<String>): String {
+    private fun stripParameters(url: String, rules: List<String>, removed: MutableList<String>): String {
         if (rules.isEmpty()) return url
         val uri = runCatching { URI(url) }.getOrNull() ?: return url
-        val query = uri.rawQuery ?: return url
         val patterns = rules.mapNotNull { runCatching { Pattern.compile(it, Pattern.CASE_INSENSITIVE) }.getOrNull() }
         if (patterns.isEmpty()) return url
-        val kept = query.split("&").filter { part ->
+        fun strip(query: String): String = query.split("&").filter { part ->
             val rawName = part.substringBefore('=')
             val name = runCatching { URLDecoder.decode(rawName, Charsets.UTF_8.name()) }.getOrDefault(rawName)
             val shouldRemove = patterns.any { it.matcher(name).matches() }
             if (shouldRemove) removed += name
             !shouldRemove
+        }.joinToString("&")
+        val query = uri.rawQuery?.let(::strip)
+        val fragment = uri.rawFragment?.let { value ->
+            when {
+                '?' in value -> value.substringBefore('?') + strip(value.substringAfter('?')).let { if (it.isEmpty()) "" else "?$it" }
+                '=' in value && !value.startsWith('/') -> strip(value)
+                else -> value
+            }
         }
-        if (kept.size == query.split("&").size) return url
-        val base = url.substringBefore('?').substringBefore('#')
-        val fragment = uri.rawFragment?.takeIf { it.isNotEmpty() }?.let { "#$it" }.orEmpty()
-        return if (kept.isEmpty()) base + fragment else "$base?${kept.joinToString("&")}$fragment"
+        val base = url.substringBefore('#').let { if (uri.rawQuery != null) it.substringBefore('?') else it }
+        return base + query?.takeIf(String::isNotEmpty)?.let { "?$it" }.orEmpty() +
+            fragment?.takeIf(String::isNotEmpty)?.let { "#$it" }.orEmpty()
+    }
+
+    private fun isSignedUrl(url: String): Boolean = URI(url).rawQuery.orEmpty().split('&').any {
+        decodeUrl(it.substringBefore('=')).lowercase(Locale.US) in setOf("x-amz-signature", "x-goog-signature", "signature", "sig", "oauth_signature")
     }
 
     private fun decodeUrl(value: String): String = runCatching {
@@ -218,10 +237,24 @@ object LinkRuleStore {
     private const val MAX_BYTES = 1_000_000
     private const val MIN_PROVIDERS = 20
 
-    fun providers(context: Context): List<LinkRuleProvider> = runCatching {
+    fun providers(context: Context): List<LinkRuleProvider> {
+        val downloaded = runCatching { parse(File(context.filesDir, RULES_FILE).readText()) }.getOrNull()
+        if (downloaded != null && downloaded.size >= MIN_PROVIDERS) return downloaded
+        return context.assets.open(RULES_FILE).bufferedReader().use { parse(it.readText()) }
+    }
+
+    fun updateIfStale(context: Context) {
         val file = File(context.filesDir, RULES_FILE)
-        if (file.exists()) parse(file.readText()) else emptyList()
-    }.getOrDefault(emptyList())
+        if (!file.exists() || System.currentTimeMillis() - file.lastModified() > 7 * 24 * 60 * 60 * 1000L) {
+            runCatching { update(context) } // Bundled rules remain available offline.
+        }
+    }
+
+    private fun persist(context: Context, rules: String) {
+        val temporary = File(context.filesDir, "$RULES_FILE.tmp")
+        temporary.writeText(rules)
+        check(temporary.renameTo(File(context.filesDir, RULES_FILE))) { "Could not store the updated rules" }
+    }
 
     fun update(context: Context): Int {
         var lastError: Throwable? = null
@@ -233,7 +266,7 @@ object LinkRuleStore {
                 require(sha256(rules) == expectedHash) { "The downloaded rules did not match their checksum" }
                 val providers = parse(rules)
                 require(providers.size >= MIN_PROVIDERS) { "The downloaded ruleset was incomplete" }
-                File(context.filesDir, RULES_FILE).writeText(rules)
+                persist(context, rules)
                 return providers.size
             } catch (error: Throwable) {
                 lastError = error
@@ -241,7 +274,7 @@ object LinkRuleStore {
         }
         return try {
             val providers = updateFromGithub()
-            File(context.filesDir, RULES_FILE).writeText(providers.first)
+            persist(context, providers.first)
             providers.second
         } catch (error: Throwable) {
             throw IllegalStateException(
@@ -256,10 +289,13 @@ object LinkRuleStore {
         connection.connectTimeout = 15_000
         connection.readTimeout = 20_000
         connection.instanceFollowRedirects = false
-        connection.inputStream.bufferedReader().use { reader ->
-            val value = reader.readText()
-            require(value.toByteArray().size <= MAX_BYTES) { "The ruleset was too large" }
-            return value
+        try {
+            connection.inputStream.use { input ->
+                val bytes = input.readBytesLimited(MAX_BYTES)
+                return bytes.toString(Charsets.UTF_8)
+            }
+        } finally {
+            connection.disconnect()
         }
     }
 
@@ -282,7 +318,7 @@ object LinkRuleStore {
         return rules to providers.size
     }
 
-    private fun parse(raw: String): List<LinkRuleProvider> {
+    internal fun parse(raw: String): List<LinkRuleProvider> {
         val providers = JSONObject(raw).getJSONObject("providers")
         return providers.keys().asSequence().mapNotNull { name ->
             val item = providers.optJSONObject(name) ?: return@mapNotNull null
@@ -309,106 +345,65 @@ object NetworkRedirectResolver {
     fun resolve(url: String): LinkCleanResult {
         val host = runCatching { URI(url).host?.lowercase(Locale.US) }.getOrNull()
             ?: return LinkCleanResult(url, url, emptyList(), emptyList())
-        val isFacebookShare = host in facebookHosts && facebookSharePath(url)
-        if (host !in shortenerHosts && !isFacebookShare) {
-            return LinkCleanResult(url, url, emptyList(), emptyList())
-        }
-        var current = if (isFacebookShare) facebookMobileUrl(url) else url
+        val facebook = host in facebookHosts && URI(url).path.orEmpty().startsWith("/share/")
+        if (host !in shortenerHosts && !facebook) return LinkCleanResult(url, url, emptyList(), emptyList())
+        var current = if (facebook) facebookMobileUrl(url) else url
         val hops = mutableListOf<String>()
-        repeat(5) {
-            val connection = URL(current).openConnection() as HttpURLConnection
-            connection.connectTimeout = 10_000
-            connection.readTimeout = 15_000
-            connection.instanceFollowRedirects = false
-            connection.requestMethod = if (isFacebookShare) "GET" else "HEAD"
-            connection.setRequestProperty(
-                "User-Agent",
-                if (isFacebookShare) FACEBOOK_USER_AGENT else DEFAULT_USER_AGENT
-            )
-            var code = runCatching { connection.responseCode }.getOrElse {
-                return LinkCleanResult(url, current, emptyList(), hops, it.message)
-            }
-            if (code == HttpURLConnection.HTTP_BAD_METHOD || code == HttpURLConnection.HTTP_NOT_IMPLEMENTED) {
-                connection.disconnect()
-                val getConnection = URL(current).openConnection() as HttpURLConnection
-                getConnection.connectTimeout = 10_000
-                getConnection.readTimeout = 15_000
-                getConnection.instanceFollowRedirects = false
-                code = runCatching { getConnection.responseCode }.getOrElse {
-                    return LinkCleanResult(url, current, emptyList(), hops, it.message)
+        val visited = mutableSetOf<String>()
+        return try {
+            repeat(5) {
+                check(visited.add(current)) { "Redirect loop detected" }
+                val response = request(current, if (facebook) "GET" else "HEAD", facebook)
+                    .let { if (it.code in setOf(405, 501)) request(current, "GET", facebook) else it }
+                check(response.code < 400) { "Could not expand this link (HTTP " + response.code + ")" }
+                if (response.code !in 300..399) {
+                    val target = if (facebook) response.refresh?.let(::facebookRefreshTarget) else null
+                    return LinkCleanResult(url, target ?: if (facebook && hops.isEmpty()) url else current,
+                        emptyList(), if (target == null) hops else hops + "Facebook")
                 }
-                val location = if (code in 300..399) getConnection.getHeaderField("Location") else null
-                getConnection.disconnect()
-                if (location.isNullOrBlank()) return LinkCleanResult(url, current, emptyList(), hops)
+                val location = response.location ?: error("The redirect destination was missing")
                 val next = URI(current).resolve(location).toString()
-                if (!isHttpNetworkUrl(next)) return LinkCleanResult(url, current, emptyList(), hops, "Redirected to an unsupported URL")
-                hops += Uri.parse(current).host.orEmpty()
+                check(isHttpNetworkUrl(next)) { "Redirected to an unsupported URL" }
+                hops += URI(current).host.orEmpty()
                 current = next
-                return@repeat
             }
-            val location = if (code in 300..399) connection.getHeaderField("Location") else null
-            val refresh = if (isFacebookShare) connection.getHeaderField("Refresh") else null
-            connection.disconnect()
-            if (location.isNullOrBlank()) {
-                val facebookTarget = refresh?.let(::facebookRefreshTarget)
-                if (facebookTarget != null) {
-                    return LinkCleanResult(url, facebookTarget, emptyList(), hops + "Facebook")
-                }
-                return LinkCleanResult(url, if (isFacebookShare && hops.isEmpty()) url else current, emptyList(), hops)
-            }
-            val next = URI(current).resolve(location).toString()
-            if (!isHttpNetworkUrl(next)) return LinkCleanResult(url, current, emptyList(), hops, "Redirected to an unsupported URL")
-            hops += Uri.parse(current).host.orEmpty()
-            current = next
+            LinkCleanResult(url, current, emptyList(), hops, "Network redirect limit reached")
+        } catch (error: Exception) {
+            LinkCleanResult(url, if (facebook && hops.isEmpty()) url else current, emptyList(), hops,
+                error.message ?: "Could not expand this link")
         }
-        return LinkCleanResult(url, current, emptyList(), hops, "Network redirect limit reached")
+    }
+
+    private data class Response(val code: Int, val location: String?, val refresh: String?)
+
+    private fun request(url: String, method: String, facebook: Boolean): Response {
+        val connection = URL(url).openConnection() as HttpURLConnection
+        try {
+            connection.connectTimeout = 5_000
+            connection.readTimeout = 5_000
+            connection.instanceFollowRedirects = false
+            connection.requestMethod = method
+            connection.setRequestProperty("User-Agent", if (facebook) FACEBOOK_USER_AGENT else "CleanCopy/1.5")
+            return Response(connection.responseCode, connection.getHeaderField("Location"), connection.getHeaderField("Refresh"))
+        } finally { connection.disconnect() }
     }
 
     private fun isHttpNetworkUrl(value: String): Boolean = runCatching {
-        URI(value).let { it.scheme?.lowercase(Locale.US) in setOf("http", "https") && !it.host.isNullOrBlank() }
+        URI(value).let { it.scheme?.lowercase(Locale.US) in setOf("http", "https") && !it.host.isNullOrBlank() && it.userInfo == null }
     }.getOrDefault(false)
 
-    private fun facebookSharePath(value: String): Boolean = runCatching {
-        URI(value).path?.lowercase(Locale.US)?.startsWith("/share/") == true
-    }.getOrDefault(false)
-
-    private fun facebookMobileUrl(value: String): String = runCatching {
-        URI(value).let { uri ->
-            URI(
-                "https",
-                "m.facebook.com",
-                uri.path,
-                uri.rawQuery,
-                uri.rawFragment
-            ).toString()
-        }
-    }.getOrDefault(value)
+    internal fun facebookMobileUrl(value: String): String = URI(value).let { uri ->
+        "https://m.facebook.com" + uri.rawPath + uri.rawQuery?.let { "?" + it }.orEmpty() +
+            uri.rawFragment?.let { "#" + it }.orEmpty()
+    }
 
     internal fun facebookRefreshTarget(value: String): String? = runCatching {
         Regex("(?:^|;)\\s*URL=fb://(?:fullscreen_video|video)/(\\d+)", RegexOption.IGNORE_CASE)
-            .find(value)
-            ?.groupValues
-            ?.get(1)
-            ?.let { "https://www.facebook.com/reel/$it" }
+            .find(value)?.groupValues?.get(1)?.let { "https://www.facebook.com/reel/" + it }
     }.getOrNull()
 
-    private const val DEFAULT_USER_AGENT = "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36"
     private const val FACEBOOK_USER_AGENT = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1"
-
-    private val shortenerHosts = setOf(
-        "t.co",
-        "bit.ly",
-        "buff.ly",
-        "tinyurl.com",
-        "is.gd",
-        "ow.ly",
-        "rebrand.ly",
-        "shorturl.at"
-    )
-
-    private val facebookHosts = setOf(
-        "facebook.com",
-        "www.facebook.com",
-        "m.facebook.com"
-    )
+    private val shortenerHosts = setOf("t.co", "bit.ly", "buff.ly", "tinyurl.com", "is.gd", "ow.ly", "rebrand.ly",
+        "shorturl.at", "vm.tiktok.com", "vt.tiktok.com", "amzn.to", "lnkd.in", "rb.gy", "cutt.ly")
+    private val facebookHosts = setOf("facebook.com", "www.facebook.com", "m.facebook.com")
 }

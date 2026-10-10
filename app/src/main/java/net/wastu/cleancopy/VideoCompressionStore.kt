@@ -8,7 +8,7 @@ object VideoCompressionStore {
 
     fun isEnabled(context: Context): Boolean = context
         .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        .getBoolean(KEY_COMPRESS_VIDEO, true)
+        .getBoolean(KEY_COMPRESS_VIDEO, false)
 
     fun setEnabled(context: Context, enabled: Boolean) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)

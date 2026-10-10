@@ -23,20 +23,12 @@ object MediaSanitizer {
         return when (descriptor.kind) {
             MediaKind.IMAGE -> {
                 onProgress(0f)
-                if (descriptor.outputExtension == "gif") {
-                    withContext(Dispatchers.IO) {
-                        context.contentResolver.openInputStream(source)?.use { input ->
-                            output.outputStream().use { stream -> input.copyTo(stream) }
-                        } ?: error("The GIF source could not be opened")
-                    }
-                    onProgress(1f)
-                    SanitizedMedia(output, descriptor.mimeType, MediaKind.IMAGE)
-                } else {
+                run {
                     val image = withContext(Dispatchers.IO) {
                         ImageSanitizer.sanitize(context, source, output).getOrThrow()
                     }
                     onProgress(1f)
-                    SanitizedMedia(image.file, image.mimeType, MediaKind.IMAGE)
+                    SanitizedMedia(image.file, image.mimeType, MediaKind.IMAGE, image.metadataSectionsRemoved, image.notes)
                 }
             }
             MediaKind.VIDEO -> withContext(Dispatchers.IO) {

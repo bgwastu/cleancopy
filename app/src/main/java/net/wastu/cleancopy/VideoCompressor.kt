@@ -39,17 +39,21 @@ object VideoCompressor {
         context: Context,
         source: Uri,
         output: File,
-        onProgress: suspend (Float) -> Unit
+        onProgress: suspend (Float) -> Unit,
+        compress: Boolean = true
     ): SanitizedMedia {
         output.parentFile?.mkdirs()
         try {
-            val targetHeight = withContext(Dispatchers.IO) {
+            val targetHeight = if (compress) withContext(Dispatchers.IO) {
                 sourceHeight(context, source).coerceIn(1, MAX_HEIGHT)
-            }
+            } else null
             export(context, source, output, targetHeight, onProgress)
             withContext(Dispatchers.IO) { Mp4MetadataScrubber.scrub(output) }
+            withContext(Dispatchers.IO) { VideoSanitizer.validate(context, source, output) }
             onProgress(1f)
-            return SanitizedMedia(output, "video/mp4", MediaKind.VIDEO)
+            return SanitizedMedia(output, "video/mp4", MediaKind.VIDEO, notes = listOf(
+                if (compress) "Video compressed to H.264/AAC, up to 720p" else "Video converted to MP4 at its original resolution"
+            ))
         } catch (error: Throwable) {
             output.delete()
             throw error
@@ -60,7 +64,7 @@ object VideoCompressor {
         context: Context,
         source: Uri,
         output: File,
-        targetHeight: Int,
+        targetHeight: Int?,
         onProgress: suspend (Float) -> Unit
     ) = withContext(Dispatchers.Main.immediate) {
         suspendCancellableCoroutine { continuation ->
@@ -93,14 +97,15 @@ object VideoCompressor {
 
             continuation.invokeOnCancellation {
                 pollingJob?.cancel()
-                mainHandler.post { runCatching { transformer.cancel() } }
+                if (Looper.myLooper() == Looper.getMainLooper()) runCatching { transformer.cancel() }
+                else mainHandler.post { runCatching { transformer.cancel() } }
             }
 
             val editedMediaItem = EditedMediaItem.Builder(MediaItem.fromUri(source))
                 .setEffects(
                     Effects(
                         emptyList(),
-                        listOf(Presentation.createForHeight(targetHeight))
+                        targetHeight?.let { listOf(Presentation.createForHeight(it)) }.orEmpty()
                     )
                 )
                 .build()
@@ -127,7 +132,8 @@ object VideoCompressor {
             } else {
                 retriever.setDataSource(context, source)
             }
-            retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)
+            val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
+            retriever.extractMetadata(if (rotation == 90 || rotation == 270) MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH else MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)
                 ?.toIntOrNull()
                 ?: MAX_HEIGHT
         } finally {

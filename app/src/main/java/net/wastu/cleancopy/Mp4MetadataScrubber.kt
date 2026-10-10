@@ -1,116 +1,57 @@
 package net.wastu.cleancopy
 
+import java.io.File
 import java.io.RandomAccessFile
 
-/** Clears MP4 metadata boxes without touching encoded audio/video samples. */
+/** Clears metadata without changing box offsets or encoded audio/video samples. */
 object Mp4MetadataScrubber {
-    private val containers = setOf(
-        "moov", "trak", "mdia", "minf", "stbl", "edts", "dinf", "mvex",
-        "moof", "traf", "mfra", "schi"
-    )
+    private val containers = setOf("moov", "trak", "mdia", "minf", "stbl", "edts", "dinf", "mvex", "moof", "traf", "mfra", "schi")
 
-    fun scrub(file: java.io.File) {
-        RandomAccessFile(file, "rw").use { randomAccessFile ->
-            scrubRange(randomAccessFile, 0L, randomAccessFile.length())
-        }
-    }
+    fun scrub(file: File) = RandomAccessFile(file, "rw").use { scrubRange(it, 0, it.length(), 0) }
 
-    private fun scrubRange(file: RandomAccessFile, start: Long, end: Long) {
+    private fun scrubRange(file: RandomAccessFile, start: Long, end: Long, depth: Int) {
+        require(depth < 32) { "The MP4 container is nested too deeply" }
         var position = start
-        while (position + 8 <= end) {
+        while (position < end) {
+            require(end - position >= 8) { "Truncated MP4 box" }
             file.seek(position)
             val size32 = file.readInt().toLong() and 0xffffffffL
-            val type = ByteArray(4).also(file::readFully).toString(Charsets.US_ASCII)
-            var headerSize = 8L
-            val boxSize = when (size32) {
-                0L -> end - position
-                1L -> {
-                    headerSize = 16L
-                    file.readLong()
-                }
-                else -> size32
-            }
-            if (boxSize < headerSize || position + boxSize > end) return
-            val boxEnd = position + boxSize
-
+            val type = ByteArray(4).also(file::readFully).toString(Charsets.ISO_8859_1)
+            val headerSize = if (size32 == 1L) 16L else 8L
+            require(end - position >= headerSize) { "Truncated MP4 box header" }
+            val size = when (size32) { 0L -> end - position; 1L -> file.readLong(); else -> size32 }
+            require(size >= headerSize && size <= end - position) { "Invalid MP4 box size" }
+            val payload = position + headerSize
+            val boxEnd = position + size
             when {
-                type == "udta" -> scrubMetadataChildren(file, position + headerSize, boxEnd)
-                type == "meta" -> scrubMetadataChildren(file, position + headerSize + 4L, boxEnd)
-                type == "mvhd" || type == "tkhd" || type == "mdhd" -> {
-                    clearTimes(file, position + headerSize)
+                type in setOf("udta", "meta", "uuid") -> {
+                    file.seek(position + 4)
+                    file.write("free".toByteArray(Charsets.US_ASCII))
+                    zero(file, payload, boxEnd)
                 }
-                type in containers -> scrubRange(file, position + headerSize, boxEnd)
+                type in setOf("mvhd", "tkhd", "mdhd") -> {
+                    require(boxEnd - payload >= 4) { "Truncated MP4 timing header" }
+                    file.seek(payload)
+                    val version = file.readUnsignedByte()
+                    require(version in 0..1) { "Unsupported MP4 timing version" }
+                    val bytes = if (version == 1) 16L else 8L
+                    require(boxEnd - payload >= 4 + bytes) { "Truncated MP4 timestamps" }
+                    zero(file, payload + 4, payload + 4 + bytes)
+                }
+                type in containers -> scrubRange(file, payload, boxEnd, depth + 1)
             }
             position = boxEnd
         }
     }
 
-    private fun scrubMetadataChildren(file: RandomAccessFile, start: Long, end: Long) {
-        var position = start
-        var foundChild = false
-        while (position + 8 <= end) {
-            val box = readBox(file, position, end) ?: return
-            foundChild = true
-            when (box.type) {
-                "hdlr", "keys" -> Unit
-                "data" -> zeroRange(file, box.payloadStart + 8L, box.end)
-                else -> {
-                    if (hasBox(file, box.payloadStart, box.end)) {
-                        scrubMetadataChildren(file, box.payloadStart, box.end)
-                    } else {
-                        zeroRange(file, box.payloadStart, box.end)
-                    }
-                }
-            }
-            position = box.end
-        }
-        if (!foundChild) return
-    }
-
-    private fun hasBox(file: RandomAccessFile, start: Long, end: Long): Boolean =
-        readBox(file, start, end) != null
-
-    private fun readBox(file: RandomAccessFile, position: Long, end: Long): Box? {
-        if (position + 8 > end) return null
-        file.seek(position)
-        val size32 = file.readInt().toLong() and 0xffffffffL
-        val type = ByteArray(4).also(file::readFully).toString(Charsets.US_ASCII)
-        var headerSize = 8L
-        val boxSize = when (size32) {
-            0L -> end - position
-            1L -> {
-                headerSize = 16L
-                file.readLong()
-            }
-            else -> size32
-        }
-        if (boxSize < headerSize || position + boxSize > end) return null
-        return Box(type, position + headerSize, position + boxSize)
-    }
-
-    private fun clearTimes(file: RandomAccessFile, payloadStart: Long) {
-        file.seek(payloadStart)
-        val version = file.readUnsignedByte()
-        val timeSize = if (version == 1) 8L else 4L
-        zeroRange(file, payloadStart + 4, payloadStart + 4 + timeSize)
-        zeroRange(file, payloadStart + 4 + timeSize, payloadStart + 4 + timeSize * 2)
-    }
-
-    private fun zeroRange(file: RandomAccessFile, start: Long, end: Long) {
-        val zeros = ByteArray(4096)
-        var position = start
-        while (position < end) {
-            val count = minOf(zeros.size.toLong(), end - position).toInt()
-            file.seek(position)
-            file.write(zeros, 0, count)
-            position += count
+    private fun zero(file: RandomAccessFile, start: Long, end: Long) {
+        file.seek(start)
+        val buffer = ByteArray(8192)
+        var remaining = end - start
+        while (remaining > 0) {
+            val count = minOf(remaining, buffer.size.toLong()).toInt()
+            file.write(buffer, 0, count)
+            remaining -= count
         }
     }
-
-    private data class Box(
-        val type: String,
-        val payloadStart: Long,
-        val end: Long
-    )
-
 }

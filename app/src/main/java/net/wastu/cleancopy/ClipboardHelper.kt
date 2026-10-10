@@ -6,15 +6,12 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.core.content.IntentCompat
 import java.util.Locale
 
 object ClipboardHelper {
 
-    /**
-     * Copies one or more media URIs to the clipboard with explicit image/video and wildcard MIME types
-     * so keyboards (Gboard, Samsung Keyboard) and apps (WhatsApp, Telegram, Discord, Slack, etc.)
-     * immediately recognize the clipboard content as media.
-     */
+    /** Publishes readable media URIs. The receiving app decides which MIME types it can paste. */
     fun copyMedia(
         context: Context,
         uris: List<Uri>,
@@ -24,24 +21,41 @@ object ClipboardHelper {
         if (uris.isEmpty()) return false
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return false
 
-        val primaryUri = uris.first()
-        val detectedMime = mimeType
-            ?: context.contentResolver.getType(primaryUri)
-            ?: extensionToMime(primaryUri.lastPathSegment?.substringAfterLast('.', ""))
-            ?: "application/octet-stream"
-
-        val mimeTypesList = buildMimeTypesList(detectedMime)
-
-        val description = ClipDescription(label, mimeTypesList.toTypedArray())
-        val clip = ClipData(description, ClipData.Item(primaryUri))
-        for (i in 1 until uris.size) {
-            clip.addItem(ClipData.Item(uris[i]))
-        }
-
         return runCatching {
+            check(uris.all { isReadable(context, it) }) { "A cleaned file is no longer available" }
+            val mimeTypes = uris.flatMap { uri ->
+                buildMimeTypesList(mimeType ?: context.contentResolver.getType(uri)
+                    ?: extensionToMime(uri.lastPathSegment?.substringAfterLast('.', "")))
+            }.distinct()
+            val clip = ClipData(ClipDescription(label, mimeTypes.toTypedArray()), ClipData.Item(uris.first()))
+            uris.drop(1).forEach { clip.addItem(ClipData.Item(it)) }
             clipboard.setPrimaryClip(clip)
             true
         }.getOrDefault(false)
+    }
+
+    fun isReadable(context: Context, uri: Uri): Boolean = runCatching {
+        context.contentResolver.openInputStream(uri)?.use { it.read() != -1 } ?: false
+    }.getOrDefault(false)
+
+    fun shareMediaIntent(context: Context, uris: List<Uri>, mimeTypes: List<String>): Intent {
+        require(uris.isNotEmpty() && uris.all { isReadable(context, it) }) { "The cleaned media is no longer available" }
+        val type = commonMimeType(mimeTypes)
+        return Intent(if (uris.size == 1) Intent.ACTION_SEND else Intent.ACTION_SEND_MULTIPLE).apply {
+            this.type = type
+            if (uris.size == 1) putExtra(Intent.EXTRA_STREAM, uris.first())
+            else putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
+            clipData = ClipData(ClipDescription("CleanCopy clean media", mimeTypes.distinct().toTypedArray()), ClipData.Item(uris.first())).also { clip ->
+                uris.drop(1).forEach { clip.addItem(ClipData.Item(it)) }
+            }
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+    }
+
+    internal fun commonMimeType(types: List<String>): String {
+        if (types.distinct().size == 1) return types.first()
+        val families = types.map { it.substringBefore('/') }.distinct()
+        return if (families.size == 1) "${families.first()}/*" else "*/*"
     }
 
     /**
@@ -112,16 +126,14 @@ object ClipboardHelper {
     fun extractIncomingUris(intent: Intent): List<Uri> = buildList {
         when (intent.action) {
             Intent.ACTION_SEND -> {
-                @Suppress("DEPRECATION")
-                val stream = intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
+                val stream = runCatching { IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java) }.getOrNull()
                 if (stream != null && stream.scheme in setOf("content", "file")) {
                     add(stream)
                 }
                 intent.data?.let { if (it.scheme in setOf("content", "file")) add(it) }
             }
             Intent.ACTION_SEND_MULTIPLE -> {
-                @Suppress("DEPRECATION")
-                val streamList = intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)
+                val streamList = runCatching { IntentCompat.getParcelableArrayListExtra(intent, Intent.EXTRA_STREAM, Uri::class.java) }.getOrNull()
                 if (!streamList.isNullOrEmpty()) {
                     streamList.filter { it.scheme in setOf("content", "file") }.forEach(::add)
                 }

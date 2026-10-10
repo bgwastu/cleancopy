@@ -1,6 +1,5 @@
 package net.wastu.cleancopy
 
-import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.ComponentName
 import android.content.Context
@@ -69,11 +68,11 @@ class MainActivity : ComponentActivity() {
             var clipboardUrl by remember { mutableStateOf<String?>(null) }
             LaunchedEffect(resumeTick) {
                 val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                val text = cm.primaryClip?.getItemAt(0)?.text?.toString()?.trim()
-                clipboardUrl = if (text != null && (text.startsWith("http://") || text.startsWith("https://"))) text else null
+                val text = runCatching { cm.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.text?.toString()?.trim() }.getOrNull()
+                clipboardUrl = text?.let(LinkSanitizer::firstLink)
             }
 
-            var showChooseSourceDialog by remember { mutableStateOf(false) }
+            var showChooseSourceDialog by rememberSaveable { mutableStateOf(false) }
 
             CleanCopyTheme {
                 CleanCopyApp(
@@ -93,6 +92,7 @@ class MainActivity : ComponentActivity() {
                     onHistoryBack = { selectedHistoryId = null },
                     onOpenHistoryMedia = { openHistoryMedia(it) },
                     onCopyHistoryMedia = { copyHistoryMedia(it) },
+                    onShareHistoryMedia = { shareHistoryMedia(it) },
                     onHistoryEnabledChanged = {
                         historyEnabled = it
                         ClipboardHistoryStore.setEnabled(this@MainActivity, it)
@@ -132,6 +132,11 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         resumeTick++
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) resumeTick++
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -193,20 +198,13 @@ class MainActivity : ComponentActivity() {
 
     private fun refreshLinkRules() {
         lifecycleScope.launch {
-            runCatching { withContext(Dispatchers.IO) { LinkRuleStore.update(this@MainActivity) } }
-                .onFailure { error ->
-                    Toast.makeText(
-                        this@MainActivity,
-                        error.message ?: "Could not update link-cleaning rules",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
+            withContext(Dispatchers.IO) { LinkRuleStore.updateIfStale(this@MainActivity) }
         }
     }
 
     private fun openHistoryMedia(entry: ClipboardHistoryEntry) {
         val intent = if (entry.kind == MediaKind.LINK) {
-            Intent(Intent.ACTION_VIEW, Uri.parse(entry.after.firstOrNull()?.value ?: entry.clipboardUri))
+            Intent(Intent.ACTION_VIEW, Uri.parse(LinkSanitizer.firstLink(entry.clipboardUri) ?: entry.clipboardUri))
         } else {
             val mimeType = if (entry.kind == MediaKind.IMAGE) "image/*" else "video/*"
             Intent(Intent.ACTION_VIEW)
@@ -220,11 +218,33 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun copyHistoryMedia(entry: ClipboardHistoryEntry) {
-        if (entry.kind == MediaKind.LINK) {
-            ClipboardHelper.copyText(this, entry.clipboardUri, entry.sourceName)
-        } else {
-            ClipboardHelper.copyMedia(this, listOf(Uri.parse(entry.clipboardUri)), entry.sourceName)
+        lifecycleScope.launch {
+            val readable = entry.kind == MediaKind.LINK || withContext(Dispatchers.IO) { ClipboardHelper.isReadable(this@MainActivity, Uri.parse(entry.clipboardUri)) }
+            val copied = readable && if (entry.kind == MediaKind.LINK) {
+                ClipboardHelper.copyText(this@MainActivity, entry.clipboardUri, entry.sourceName)
+            } else ClipboardHelper.copyMedia(this@MainActivity, listOf(Uri.parse(entry.clipboardUri)), entry.sourceName)
+            val message = when {
+                !copied -> "This file is no longer available. Choose the source again."
+                entry.kind == MediaKind.LINK -> "Text copied to clipboard"
+                else -> "Media added to clipboard"
+            }
+            Toast.makeText(this@MainActivity, message, Toast.LENGTH_LONG).show()
         }
-        Toast.makeText(this, "${formatMediaKind(entry.kind)} copied to clipboard", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun shareHistoryMedia(entry: ClipboardHistoryEntry) {
+        lifecycleScope.launch {
+            runCatching {
+                val outgoing = if (entry.kind == MediaKind.LINK) Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_TEXT, entry.clipboardUri)
+                } else withContext(Dispatchers.IO) {
+                    val uri = Uri.parse(entry.clipboardUri)
+                    ClipboardHelper.shareMediaIntent(this@MainActivity, listOf(uri), listOf(contentResolver.getType(uri)
+                        ?: if (entry.kind == MediaKind.IMAGE) "image/*" else "video/*"))
+                }
+                startActivity(Intent.createChooser(outgoing, "Share clean content"))
+            }.onFailure { Toast.makeText(this@MainActivity, "This result is no longer available to share", Toast.LENGTH_LONG).show() }
+        }
     }
 }

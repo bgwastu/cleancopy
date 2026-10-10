@@ -1,1 +1,1 @@
-# MetaRelay has no release shrinking rules yet.
+# Library consumer rules cover Compose, ExifInterface and Media3.

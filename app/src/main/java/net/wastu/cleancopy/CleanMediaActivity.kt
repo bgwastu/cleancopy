@@ -5,600 +5,217 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
-import android.provider.OpenableColumns
-import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Movie
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.draw.clip
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import androidx.core.content.FileProvider
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.util.Locale
 
-class CleanMediaActivity : ComponentActivity() {
-    private var pickerLaunched = false
-    private var processingJob: Job? = null
-    private var progressState by mutableStateOf(ProcessingState())
-    private var completionData by mutableStateOf<CleanResultData?>(null)
-    private var preparedMedia: List<PreparedMedia> = emptyList()
-    private var activeSessionDirectory: File? = null
-
-    private val currentClipboard by lazy {
-        intent.getBooleanExtra(EXTRA_CURRENT_CLIPBOARD, false)
-    }
-    private var clipboardMimeType: String? = null
-
-    private val picker = registerForActivityResult(
-        ActivityResultContracts.OpenMultipleDocuments()
-    ) { uris ->
-        if (uris.isNullOrEmpty()) {
-            finish()
-        } else {
-            uris.forEach { uri ->
-                runCatching {
-                    contentResolver.takePersistableUriPermission(
-                        uri,
-                        Intent.FLAG_GRANT_READ_URI_PERMISSION
-                    )
-                }
-            }
-            process(uris)
-        }
+open class CleanMediaActivity : ComponentActivity() {
+    private val model by lazy { ViewModelProvider(this)[CleaningViewModel::class.java] }
+    private var clipboardAttempt = 0
+    private val readsClipboard get() =
+        (this is CleanClipboardActivity && !intent.hasExtra(CleanClipboardActivity.EXTRA_INPUT_TEXT)) ||
+            intent.getBooleanExtra(EXTRA_CURRENT_CLIPBOARD, false)
+    private val picker = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isEmpty()) finish() else model.start(uris)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val debugPath = if (BuildConfig.DEBUG) intent.getStringExtra(EXTRA_DEBUG_PATH) else null
-        val debugSource = debugPath?.let(::copyDebugSource)
-
         setContent {
             CleanCopyTheme {
-                BackHandler(enabled = progressState.isProcessing) { cancelProcessing() }
-
-                if (completionData != null) {
+                BackHandler { if (!model.saving) close() }
+                val notice = model.notice
+                LaunchedEffect(notice) {
+                    if (notice != null) {
+                        Toast.makeText(this@CleanMediaActivity, notice, Toast.LENGTH_LONG).show()
+                        model.notice = null
+                    }
+                }
+                if (!model.started) {
+                    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.2f)))
+                } else model.result?.let { data ->
                     CleanResultModal(
-                        result = completionData!!,
-                        onDismiss = ::discardAndFinish,
-                        onCopyToClipboard = { copySelection(0, false) },
-                        mediaItems = preparedMedia.map { media ->
-                            CleanResultMediaItem(
-                                uri = media.uri,
-                                sourceName = media.displayName,
-                                kind = media.kind,
-                                cleanedDetails = mediaCleanupDetails(
-                                    before = media.before,
-                                    after = media.after,
-                                    outputName = media.displayName,
-                                    wasSanitized = media.wasSanitized
-                                ),
-                                wasAlreadyClean = !media.wasSanitized && media.before.displayName == media.displayName
-                            )
-                        },
-                        onCopyMedia = ::copySelection,
-                        onSaveAndCopyMedia = ::saveAndCopySelection,
-                        onSaveAllMedia = if (preparedMedia.size > 1) ::saveAllMedia else null
+                        result = data,
+                        onDismiss = ::close,
+                        onCopyToClipboard = ::copyText,
+                        mediaItems = model.media.map { CleanResultMediaItem(it.uri, it.displayName, it.kind, it.details) },
+                        onCopyMedia = if (data.kind != MediaKind.LINK) ::copyMedia else null,
+                        onSaveMedia = if (data.kind != MediaKind.LINK && Build.VERSION.SDK_INT >= 29) {
+                            { index, all -> model.save(selection(index, all)) }
+                        } else null,
+                        onShareMedia = if (data.kind != MediaKind.LINK) ::shareMedia else null,
+                        onShare = if (data.kind == MediaKind.LINK) ::shareText else null,
+                        onOpenInBrowser = if (data.kind == MediaKind.LINK && LinkSanitizer.firstLink(data.cleanedText.orEmpty()) != null) ::openBrowser else null,
+                        busy = model.saving
                     )
-                } else {
-                    ProcessingOverlay(progressState, ::cancelProcessing)
-                }
+                } ?: ProcessingSheet(
+                    status = model.status,
+                    progress = model.progress,
+                    error = model.error,
+                    onCancel = ::close,
+                    onRetry = ::retry
+                )
             }
         }
-
-        if (debugSource != null) {
-            pickerLaunched = true
-            window.decorView.post { launchProcessing(listOf(debugSource)) }
-        } else if (currentClipboard) {
-            pickerLaunched = true
-            window.decorView.post { launchProcessing(preparedInputUris() ?: resolveInputUris()) }
-        } else if (!pickerLaunched) {
-            pickerLaunched = true
-            val inputUris = preparedInputUris()
-            if (inputUris != null) {
-                window.decorView.post { launchProcessing(inputUris) }
-            } else {
-                window.decorView.post { picker.launch(arrayOf("image/*", "video/*")) }
+        if (model.started || model.pickerRequested) return
+        val text = intent.getStringExtra(CleanClipboardActivity.EXTRA_INPUT_TEXT)
+        val explicitUris = intent.getStringArrayListExtra(EXTRA_INPUT_URIS)?.map(Uri::parse).orEmpty()
+        val shareUris = ClipboardHelper.extractIncomingUris(intent)
+        val debugUri = if (BuildConfig.DEBUG) intent.getStringExtra(EXTRA_DEBUG_PATH)?.let { Uri.fromFile(File(it)) } else null
+        when {
+            text != null -> model.start(inputText = text)
+            explicitUris.isNotEmpty() -> model.start(explicitUris)
+            shareUris.isNotEmpty() -> model.start(shareUris)
+            debugUri != null -> model.start(listOf(debugUri))
+            this is ShareReceiverActivity -> model.start(inputText = ClipboardHelper.extractIncomingText(intent))
+            this is CleanClipboardActivity || intent.getBooleanExtra(EXTRA_CURRENT_CLIPBOARD, false) -> Unit // Read only after focus.
+            else -> {
+                model.pickerRequested = true
+                picker.launch(arrayOf("image/*", "video/*"))
             }
         }
     }
 
-    private fun resolveInputUris(): List<Uri> {
-        if (!currentClipboard) return emptyList()
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus && !model.started && readsClipboard) readClipboard()
+    }
+
+    private fun retry() {
+        if (readsClipboard) {
+            clipboardAttempt = 0
+            readClipboard(retry = true)
+        } else model.retry()
+    }
+
+    private fun readClipboard(retry: Boolean = false) {
+        if ((model.started && !retry) || isFinishing) return
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val clip = clipboard.primaryClip ?: return emptyList()
-        clipboardMimeType = (0 until clip.description.mimeTypeCount)
-            .map { clip.description.getMimeType(it) }
-            .firstOrNull { it.startsWith("image/") || it.startsWith("video/") }
-        return buildList {
-            fun addClipData(data: ClipData?) {
-                if (data == null) return
-                repeat(data.itemCount) { index ->
-                    val item = data.getItemAt(index)
-                    item.uri?.let(::add)
-                    item.text?.toString()?.let { text ->
-                        runCatching { Uri.parse(text) }.getOrNull()?.let(::add)
-                    }
-                    item.intent?.data?.let(::add)
-                    @Suppress("DEPRECATION")
-                    item.intent?.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)?.let(::add)
-                    addClipData(item.intent?.clipData)
-                }
-            }
-            addClipData(clip)
-        }.filter { it.scheme in setOf("content", "file") }.distinct()
-    }
-
-    private fun preparedInputUris(): List<Uri>? = intent.getStringArrayListExtra(EXTRA_INPUT_URIS)
-        ?.map(Uri::parse)
-        ?.takeIf { it.isNotEmpty() }
-
-    private fun launchProcessing(uris: List<Uri>) {
-        if (uris.isEmpty()) {
-            Toast.makeText(this, "No image or video found in the current clipboard", Toast.LENGTH_SHORT).show()
-            finish()
-        } else {
-            process(uris)
-        }
-    }
-
-    private fun process(uris: List<Uri>) {
-        Log.i(TAG, "Processing ${uris.size} selected media item(s)")
-        progressState = ProcessingState(
-            isProcessing = true,
-            totalItems = uris.size,
-            status = "Preparing clean copies..."
-        )
-        val sessionDirectory = File(cacheDir, "clipboard/${System.currentTimeMillis()}").apply { mkdirs() }
-        activeSessionDirectory = sessionDirectory
-
-        processingJob = lifecycleScope.launch {
-            try {
-                val inputUris = if (currentClipboard) {
-                    withContext(Dispatchers.IO) { snapshotClipboardUris(uris, sessionDirectory) }
-                } else {
-                    uris
-                }
-                val prepared = mutableListOf<PreparedMedia>()
-                var totalRemovedMetadata = 0
-
-                inputUris.forEachIndexed { index, uri ->
-                    val inspection = withContext(Dispatchers.IO) {
-                        ClipboardMetadataReader.inspect(this@CleanMediaActivity, uri)
-                    }
-                    val descriptor = MediaTypeDetector.detect(this@CleanMediaActivity, uri)
-                    val filenameOnly = descriptor.outputExtension == "gif"
-                    val alreadyClean = !filenameOnly &&
-                        !descriptor.requiresMp4Normalization &&
-                        descriptor.sourceMimeType !in setOf("image/heic", "image/heif") &&
-                        inspection.fields.isEmpty()
-
-                    progressState = progressState.copy(
-                        currentItem = index + 1,
-                        currentType = inspection.kind.name.lowercase(),
-                        status = if (filenameOnly) {
-                            "Renaming GIF: ${inspection.displayName}"
-                        } else if (alreadyClean) {
-                            "Already clean: ${inspection.displayName}"
-                        } else {
-                            "Cleaning ${inspection.kind.name.lowercase()}..."
-                        }
-                    )
-
-                    if (alreadyClean) {
-                        prepared += PreparedMedia(
-                            uri = uri,
-                            displayName = inspection.displayName,
-                            mimeType = descriptor.mimeType,
-                            kind = inspection.kind,
-                            before = inspection,
-                            after = inspection,
-                            wasSanitized = false
-                        )
-                    } else {
-                        val output = MediaSanitizer.sanitize(
-                            context = this@CleanMediaActivity,
-                            source = uri,
-                            sessionDirectory = sessionDirectory,
-                            itemIndex = index
-                        ) { itemProgress ->
-                            withContext(Dispatchers.Main.immediate) {
-                                progressState = progressState.copy(
-                                    progress = ((index + itemProgress) / inputUris.size).coerceIn(0f, 1f)
-                                )
-                            }
-                        }
-                        val cleanUri = outputUri(output)
-                        val after = withContext(Dispatchers.IO) {
-                            ClipboardMetadataReader.inspect(this@CleanMediaActivity, cleanUri)
-                        }
-                        val removedCount = inspection.fields.size - after.fields.size
-                        if (removedCount > 0) totalRemovedMetadata += removedCount
-
-                        prepared += PreparedMedia(
-                            uri = cleanUri,
-                            displayName = output.file.name,
-                            mimeType = output.mimeType,
-                            kind = output.kind,
-                            before = inspection,
-                            after = after,
-                            wasSanitized = !filenameOnly
-                        )
-                    }
-                }
-
-                val finalMedia = prepared
-                preparedMedia = finalMedia
-
-                val firstItem = finalMedia.first()
-                val removedDetails = buildList {
-                    val hasLocation = firstItem.before.fields.any { it.label.contains("GPS", ignoreCase = true) || it.label.contains("Location", ignoreCase = true) }
-                    if (hasLocation) add("GPS location metadata removed")
-                    val hasExif = firstItem.before.fields.any { it.label.contains("Camera", ignoreCase = true) || it.label.contains("Make", ignoreCase = true) || it.label.contains("Date", ignoreCase = true) }
-                    if (hasExif) add("Camera & EXIF metadata scrubbed")
-                    add("Filename sanitized to prevent leaks")
-                    if (totalRemovedMetadata > 0 && isEmpty()) add("$totalRemovedMetadata metadata fields removed")
-                }
-
-                val allAlreadyClean = finalMedia.all { !it.wasSanitized }
-                progressState = progressState.copy(isProcessing = false)
-
-                completionData = CleanResultData(
-                    title = "Successfully cleaned!",
-                    subtitle = "",
-                    kind = firstItem.kind,
-                    primaryUri = firstItem.uri,
-                    sourceName = firstItem.displayName,
-                    removedCount = totalRemovedMetadata,
-                    removedDetails = removedDetails,
-                    wasAlreadyClean = allAlreadyClean
-                )
-            } catch (error: Throwable) {
-                if (error is CancellationException) {
-                    Log.i(TAG, "Cleaning canceled")
-                    sessionDirectory.deleteRecursively()
-                    finish()
-                    return@launch
-                }
-                Log.e(TAG, "Could not clean selected media", error)
-                sessionDirectory.deleteRecursively()
-                Toast.makeText(
-                    this@CleanMediaActivity,
-                    error.message ?: "Could not clean the selected media",
-                    Toast.LENGTH_LONG
-                ).show()
-                finish()
-            }
-        }
-    }
-
-    private fun snapshotClipboardUris(uris: List<Uri>, sessionDirectory: File): List<Uri> {
-        val inputDirectory = File(sessionDirectory, "inputs").apply { mkdirs() }
-        return uris.mapIndexed { index, source ->
-            val name = runCatching {
-                contentResolver.query(
-                    source,
-                    arrayOf(OpenableColumns.DISPLAY_NAME),
-                    null,
-                    null,
-                    null
-                )?.use { cursor ->
-                    if (cursor.moveToFirst()) cursor.getString(0) else null
-                }
-            }.getOrNull()
-            val extension = name?.substringAfterLast('.', "")?.lowercase(Locale.US)
-                ?.takeIf { it.isNotBlank() }
-                ?: extensionForMime(contentResolver.getType(source) ?: clipboardMimeType)
-                ?: "bin"
-            val safeBaseName = name?.let(::File)?.name?.takeIf { it.isNotBlank() }
-            val targetName = safeBaseName?.takeIf { it.substringAfterLast('.', "").isNotBlank() }
-                ?: "${safeBaseName ?: "clipboard_$index"}.$extension"
-            val target = File(inputDirectory, targetName)
-            contentResolver.openInputStream(source)?.use { input ->
-                target.outputStream().use { output -> input.copyTo(output) }
-            } ?: error("Could not read clipboard item ${index + 1}")
-            FileProvider.getUriForFile(this, "${BuildConfig.APPLICATION_ID}.fileprovider", target)
-        }
-    }
-
-    private fun extensionForMime(mimeType: String?): String? = when (mimeType?.lowercase(Locale.US)) {
-        "image/jpeg", "image/jpg" -> "jpg"
-        "image/png" -> "png"
-        "image/webp" -> "webp"
-        "image/gif" -> "gif"
-        "image/heic", "image/heif" -> "heic"
-        "video/mp4", "video/x-m4v" -> "mp4"
-        "video/quicktime" -> "mov"
-        "video/3gpp" -> "3gp"
-        "video/webm" -> "webm"
-        else -> null
-    }
-
-    private fun copySelection(index: Int, allItems: Boolean) {
-        val selected = selectedMedia(index, allItems)
-        if (selected.isEmpty()) return
-        val uris = selected.map { it.uri }
-        val copied = ClipboardHelper.copyMedia(
-            context = this,
-            uris = uris,
-            mimeType = selected.first().mimeType
-        )
-        if (!copied) {
-            Toast.makeText(this, "Could not copy the cleaned media", Toast.LENGTH_SHORT).show()
+        val clip = runCatching { clipboard.primaryClip }.getOrNull()
+        if (clip == null && clipboardAttempt++ < 10) {
+            window.decorView.postDelayed({ readClipboard(retry) }, 150)
             return
         }
-        recordHistory(selected, uris)
-        Toast.makeText(this, "Copied to clipboard", Toast.LENGTH_SHORT).show()
-        finish()
-    }
-
-    private fun saveAndCopySelection(index: Int, allItems: Boolean) {
-        val selected = selectedMedia(index, allItems)
-        if (selected.isEmpty()) return
-        val savedUris = saveSelection(selected) ?: return
-        val copied = ClipboardHelper.copyMedia(
-            context = this,
-            uris = savedUris,
-            mimeType = selected.first().mimeType
-        )
-        if (!copied) {
-            savedUris.forEach(::deleteSavedUri)
-            Toast.makeText(this, "Could not save and copy the cleaned media", Toast.LENGTH_LONG).show()
-            return
-        }
-        recordHistory(selected, savedUris)
-        activeSessionDirectory?.deleteRecursively()
-        Toast.makeText(this, "Saved to Downloads and copied", Toast.LENGTH_SHORT).show()
-        finish()
-    }
-
-    private fun saveAllMedia() {
-        val selected = preparedMedia
-        if (selected.isEmpty()) return
-        val savedUris = saveSelection(selected) ?: return
-        recordHistory(selected, savedUris)
-        activeSessionDirectory?.deleteRecursively()
-        Toast.makeText(this, "Saved to Downloads", Toast.LENGTH_SHORT).show()
-        finish()
-    }
-
-    private fun saveSelection(selected: List<PreparedMedia>): List<Uri>? {
-        val savedUris = mutableListOf<Uri>()
-        for ((saveIndex, media) in selected.withIndex()) {
-            val fallbackExtension = extensionForMime(media.mimeType) ?: "bin"
-            val displayName = media.displayName.takeIf { it.contains('.') }
-                ?: "cleancopy_${System.currentTimeMillis()}_$saveIndex.$fallbackExtension"
-            val saved = DownloadsSaver.saveToDownloads(
-                context = this,
-                sourceUri = media.uri,
-                displayName = displayName,
-                mimeType = media.mimeType
-            )
-            if (saved.isFailure) {
-                savedUris.forEach(::deleteSavedUri)
-                Toast.makeText(this, "Could not save all items to Downloads", Toast.LENGTH_LONG).show()
-                return null
-            }
-            savedUris += saved.getOrThrow()
-        }
-        return savedUris
-    }
-
-    private fun selectedMedia(index: Int, allItems: Boolean): List<PreparedMedia> =
-        if (allItems) preparedMedia else listOfNotNull(preparedMedia.getOrNull(index))
-
-    private fun recordHistory(mediaItems: List<PreparedMedia>, resultUris: List<Uri>) {
-        val capturedAt = System.currentTimeMillis()
-        mediaItems.zip(resultUris).forEachIndexed { index, (media, uri) ->
-            ClipboardHistoryStore.record(
-                this,
-                ClipboardHistoryEntry(
-                    id = capturedAt + index,
-                    clipboardUri = uri.toString(),
-                    sourceName = media.before.displayName,
-                    kind = media.kind,
-                    capturedAt = capturedAt,
-                    before = media.before.fields,
-                    after = media.after.fields
-                )
-            )
+        val uris = clip?.mediaUris().orEmpty()
+        val text = clip?.let { data ->
+            (0 until data.itemCount).mapNotNull { index ->
+                val item = data.getItemAt(index)
+                item.text?.toString() ?: item.uri?.takeIf { it.scheme in setOf("http", "https") }?.toString()
+                    ?: item.intent?.let(ClipboardHelper::extractIncomingText)
+            }.joinToString("\n")
+        }.orEmpty()
+        when {
+            uris.isNotEmpty() -> if (retry) model.retry(uris, inputText = null) else model.start(uris)
+            text.isNotBlank() -> if (retry) model.retry(emptyList(), text) else model.start(inputText = text)
+            else -> model.showInputError("No readable image, video, or link found in the clipboard")
         }
     }
 
-    private fun deleteSavedUri(uri: Uri) {
+    private fun selection(index: Int, all: Boolean) = if (all) model.media else listOfNotNull(model.media.getOrNull(index))
+
+    private fun copyMedia(index: Int, all: Boolean) {
+        val items = selection(index, all)
+        lifecycleScope.launch {
+            val readable = withContext(Dispatchers.IO) { items.isNotEmpty() && items.all { ClipboardHelper.isReadable(this@CleanMediaActivity, it.uri) } }
+            val copied = readable && ClipboardHelper.copyMedia(this@CleanMediaActivity, items.map { it.uri })
+            if (copied) {
+                model.retainOutputs(items)
+                model.notice = "Media added to clipboard"
+            } else model.notice = "Could not copy this media. Choose the source again."
+        }
+    }
+
+    private fun copyText() {
+        val copied = ClipboardHelper.copyText(this, model.result?.cleanedText.orEmpty())
+        if (copied) {
+            model.linkResult?.let { recordCleanedLinks(this, it) }
+            model.notice = "Text copied to clipboard"
+        } else model.notice = "Could not copy the text"
+    }
+
+    private fun shareMedia(index: Int, all: Boolean) {
+        val items = selection(index, all)
+        lifecycleScope.launch {
+            runCatching {
+                val outgoing = withContext(Dispatchers.IO) {
+                    ClipboardHelper.shareMediaIntent(this@CleanMediaActivity, items.map { it.uri }, items.map { it.mimeType })
+                }
+                startActivity(Intent.createChooser(outgoing, "Share clean media"))
+                model.retainOutputs(items)
+            }.onFailure { model.notice = "Could not share this media. Choose the source again." }
+        }
+    }
+
+    private fun shareText() {
         runCatching {
-            if (uri.scheme == "file") File(requireNotNull(uri.path)).delete()
-            else contentResolver.delete(uri, null, null)
-        }
+            startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, model.result?.cleanedText.orEmpty())
+            }, "Share clean links"))
+        }.onFailure { model.notice = "No app is available to share this text" }
     }
 
-    private fun discardAndFinish() {
-        activeSessionDirectory?.deleteRecursively()
+    private fun openBrowser() {
+        val url = LinkSanitizer.firstLink(model.result?.cleanedText.orEmpty()) ?: return
+        runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+            .onFailure { model.notice = "No browser is available to open this link" }
+    }
+
+    private fun close() {
+        if (model.saving) return
+        model.discard()
         finish()
     }
-
-    private fun outputUri(output: SanitizedMedia) = FileProvider.getUriForFile(
-        this,
-        "${BuildConfig.APPLICATION_ID}.fileprovider",
-        output.file
-    )
-
-    private fun cancelProcessing() {
-        if (progressState.isProcessing) processingJob?.cancel() else finish()
-    }
-
-    private fun copyDebugSource(path: String): Uri? = runCatching {
-        val source = File(path).takeIf(File::isFile) ?: return@runCatching null
-        val extension = source.name.substringAfterLast('.', "bin")
-        val fixture = File(cacheDir, "fixtures/debug-media.$extension").apply { parentFile?.mkdirs() }
-        source.inputStream().use { input -> fixture.outputStream().use { output -> input.copyTo(output) } }
-        FileProvider.getUriForFile(this, "${BuildConfig.APPLICATION_ID}.fileprovider", fixture)
-    }.getOrNull()
 
     companion object {
         const val EXTRA_DEBUG_PATH = "net.wastu.cleancopy.extra.CLEAN_DEBUG_PATH"
         const val EXTRA_CURRENT_CLIPBOARD = "net.wastu.cleancopy.extra.CURRENT_CLIPBOARD"
         const val EXTRA_INPUT_URIS = "net.wastu.cleancopy.extra.INPUT_URIS"
-        private const val TAG = "CleanCopyCleanMedia"
     }
 }
 
-private data class PreparedMedia(
-    val uri: Uri,
-    val displayName: String,
-    val mimeType: String,
-    val kind: MediaKind,
-    val before: MediaInspection,
-    val after: MediaInspection,
-    val wasSanitized: Boolean
-)
+internal fun ClipData.mediaUris(): List<Uri> = buildList {
+    fun collect(data: ClipData?) {
+        if (data == null) return
+        repeat(data.itemCount) { index ->
+            val item = data.getItemAt(index)
+            item.uri?.takeIf { it.scheme in setOf("content", "file") }?.let(::add)
+            item.intent?.let { addAll(ClipboardHelper.extractIncomingUris(it)) }
+        }
+    }
+    collect(this@mediaUris)
+}.distinct()
 
-private data class ProcessingState(
-    val isProcessing: Boolean = false,
-    val progress: Float = 0f,
-    val currentItem: Int = 0,
-    val totalItems: Int = 0,
-    val currentType: String = "media",
-    val status: String = "Opening media picker..."
-)
-
-@androidx.compose.runtime.Composable
-private fun ProcessingOverlay(state: ProcessingState, onCancel: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.55f)),
-        contentAlignment = Alignment.BottomCenter
-    ) {
-        if (state.isProcessing) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 0.dp),
-                shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 16.dp)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .navigationBarsPadding()
-                        .padding(horizontal = 24.dp, vertical = 24.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .width(40.dp)
-                            .height(4.dp)
-                            .clip(RoundedCornerShape(2.dp))
-                            .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
-                    )
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(16.dp),
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            modifier = Modifier.size(48.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Movie,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-                        }
-
-                        Spacer(Modifier.width(16.dp))
-
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                "Cleaning ${state.currentType.replaceFirstChar { it.uppercase() }}",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
-                            )
-                            if (state.totalItems > 1) {
-                                Text(
-                                    "Processing item ${state.currentItem} of ${state.totalItems}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            } else {
-                                Text(
-                                    state.status,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
-
-                    LinearProgressIndicator(
-                        progress = { state.progress },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(8.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                    )
-
-                    OutlinedButton(
-                        onClick = onCancel,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp),
-                        shape = RoundedCornerShape(16.dp)
-                    ) {
-                        Text("Cancel", style = MaterialTheme.typography.labelLarge)
-                    }
-                }
-            }
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ProcessingSheet(status: String, progress: Float, error: String?, onCancel: () -> Unit, onRetry: () -> Unit) {
+    ModalBottomSheet(onDismissRequest = onCancel, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Text(if (error == null) "Preparing clean content" else "Could not finish", style = MaterialTheme.typography.titleLarge)
+            Text(error ?: status, style = MaterialTheme.typography.bodyLarge)
+            if (error == null) LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
+            if (error != null) Button(onClick = onRetry, modifier = Modifier.fillMaxWidth()) { Text("Try again") }
+            OutlinedButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) { Text("Cancel") }
         }
     }
 }

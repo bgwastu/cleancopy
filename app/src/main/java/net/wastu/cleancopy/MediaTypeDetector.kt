@@ -21,9 +21,10 @@ data class MediaDescriptor(
 
 object MediaTypeDetector {
     fun detect(context: Context, uri: Uri): MediaDescriptor {
-        val mime = context.contentResolver.getType(uri)
+        val mime = runCatching { context.contentResolver.getType(uri) }.getOrNull()
             ?.lowercase(Locale.US)
-            ?: displayName(context, uri)?.let(::mimeFromName)
+            ?.takeUnless { it == "application/octet-stream" || it.endsWith("/*") }
+            ?: (displayName(context, uri) ?: uri.lastPathSegment)?.let(::mimeFromName)
             ?: error("The selected item has no recognizable media type")
 
         return when {
@@ -38,11 +39,11 @@ object MediaTypeDetector {
             mime == "image/heic" || mime == "image/heif" ->
                 MediaDescriptor(MediaKind.IMAGE, "image/jpeg", "jpg", sourceMimeType = mime)
             mime == "video/mp4" || mime == "video/x-m4v" || mime == "video/3gpp" ->
-                MediaDescriptor(MediaKind.VIDEO, "video/mp4", "mp4")
+                MediaDescriptor(MediaKind.VIDEO, "video/mp4", "mp4", sourceMimeType = mime)
             mime == "video/quicktime" ->
-                MediaDescriptor(MediaKind.VIDEO, "video/mp4", "mp4", requiresMp4Normalization = true)
+                MediaDescriptor(MediaKind.VIDEO, "video/mp4", "mp4", requiresMp4Normalization = true, sourceMimeType = mime)
             mime == "video/webm" ->
-                MediaDescriptor(MediaKind.VIDEO, "video/mp4", "mp4", requiresMp4Normalization = true)
+                MediaDescriptor(MediaKind.VIDEO, "video/mp4", "mp4", requiresMp4Normalization = true, sourceMimeType = mime)
             else -> error("Unsupported media format: $mime")
         }
     }

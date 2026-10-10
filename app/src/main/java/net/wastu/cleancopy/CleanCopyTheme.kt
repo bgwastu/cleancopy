@@ -11,9 +11,6 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.unit.sp
 
 private val LightColorScheme = lightColorScheme(
     primary = Color(0xFF6750A4),
@@ -65,19 +62,7 @@ private val DarkColorScheme = darkColorScheme(
     outlineVariant = Color(0xFF49454F)
 )
 
-private val CleanCopyTypography = Typography(
-    displaySmall = TextStyle(fontWeight = FontWeight.Bold, letterSpacing = 0.sp),
-    headlineMedium = TextStyle(fontWeight = FontWeight.Bold, letterSpacing = 0.sp),
-    headlineSmall = TextStyle(fontWeight = FontWeight.Bold, letterSpacing = 0.sp),
-    titleLarge = TextStyle(fontWeight = FontWeight.SemiBold, letterSpacing = 0.sp),
-    titleMedium = TextStyle(fontWeight = FontWeight.SemiBold, letterSpacing = 0.15.sp),
-    titleSmall = TextStyle(fontWeight = FontWeight.Medium, letterSpacing = 0.1.sp),
-    bodyLarge = TextStyle(fontWeight = FontWeight.Normal, letterSpacing = 0.5.sp),
-    bodyMedium = TextStyle(fontWeight = FontWeight.Normal, letterSpacing = 0.25.sp),
-    bodySmall = TextStyle(fontWeight = FontWeight.Normal, letterSpacing = 0.4.sp),
-    labelLarge = TextStyle(fontWeight = FontWeight.SemiBold, letterSpacing = 0.1.sp),
-    labelMedium = TextStyle(fontWeight = FontWeight.Medium, letterSpacing = 0.5.sp)
-)
+private val CleanCopyTypography = Typography()
 
 @Composable
 fun CleanCopyTheme(content: @Composable () -> Unit) {

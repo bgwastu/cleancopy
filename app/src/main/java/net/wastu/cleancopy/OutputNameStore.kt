@@ -5,8 +5,13 @@ import android.net.Uri
 
 object OutputNameStore {
     fun resolve(context: Context, source: Uri, counter: Int): String {
-        // Filenames can contain timestamps, device models, or personal identifying info.
-        // Always rewrite to clean indexed/counter names to prevent metadata leaks.
-        return counter.toString()
+        if (FilenameRewriteStore.isEnabled(context)) return counter.toString()
+        return safeBaseName(ClipboardMetadataReader.displayName(context, source), counter)
     }
+
+    internal fun safeBaseName(name: String, counter: Int): String = name
+        .substringAfterLast('/').substringAfterLast('\\')
+        .let { it.substringBeforeLast('.', it) }
+        .replace(Regex("[\\p{Cntrl}<>:\"/\\\\|?*]"), "_")
+        .trim().trim('.').take(120).ifBlank { counter.toString() }
 }

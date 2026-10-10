@@ -73,7 +73,6 @@
         <activity
             android:name=".CleanClipboardActivity"
             android:excludeFromRecents="true"
-            android:noHistory="true"
             android:theme="@style/Theme.CleanCopy.Transparent"
             android:exported="false" />
 

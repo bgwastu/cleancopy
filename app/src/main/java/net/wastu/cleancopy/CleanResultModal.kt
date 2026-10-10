@@ -1,96 +1,46 @@
 package net.wastu.cleancopy
 
-import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.net.Uri
-import androidx.compose.animation.animateContentSize
-import androidx.compose.foundation.Image as ComposeImage
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Badge
-import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.CleaningServices
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.DriveFileRenameOutline
-import androidx.compose.material.icons.outlined.ExpandLess
-import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.FileDownload
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.LinkOff
 import androidx.compose.material.icons.outlined.LocationOff
 import androidx.compose.material.icons.outlined.Movie
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Tune
-import androidx.compose.material3.Button
-import androidx.compose.material3.BottomSheetDefaults
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.outlined.WarningAmber
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.util.lerp
-import kotlin.math.absoluteValue
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-
-private val PreviewHeight = 200.dp
-private const val CollapsedCleanupRows = 3
 
 data class CleanResultData(
-    val title: String = "Clean Result",
-    val subtitle: String = "Review cleaned content & choose an action",
+    val title: String = "Clean result",
+    val subtitle: String = "",
     val kind: MediaKind = MediaKind.IMAGE,
     val primaryUri: Uri? = null,
     val cleanedText: String? = null,
@@ -100,7 +50,8 @@ data class CleanResultData(
     val removedDetails: List<String> = emptyList(),
     val wasAlreadyClean: Boolean = false,
     val isSaved: Boolean = false,
-    val historyId: Long? = null
+    val historyId: Long? = null,
+    val warning: String? = null
 )
 
 data class CleanResultMediaItem(
@@ -118,509 +69,155 @@ fun CleanResultModal(
     onDismiss: () -> Unit,
     onCopyToClipboard: () -> Unit,
     mediaItems: List<CleanResultMediaItem> = emptyList(),
-    onCopyMedia: ((index: Int, allItems: Boolean) -> Unit)? = null,
-    onSaveAndCopyMedia: ((index: Int, allItems: Boolean) -> Unit)? = null,
-    onSaveAndCopy: (() -> Unit)? = null,
-    onSaveAllMedia: (() -> Unit)? = null,
-    onSaveToDownloads: (() -> Unit)? = null,
+    onCopyMedia: ((Int, Boolean) -> Unit)? = null,
+    onSaveMedia: ((Int, Boolean) -> Unit)? = null,
+    onShareMedia: ((Int, Boolean) -> Unit)? = null,
     onOpenInBrowser: (() -> Unit)? = null,
     onShare: (() -> Unit)? = null,
-    onViewHistory: ((Long) -> Unit)? = null
+    busy: Boolean = false
 ) {
-    val hasMultipleMedia = mediaItems.size > 1
-    val pagerState = rememberPagerState(pageCount = { mediaItems.size.coerceAtLeast(1) })
-    val currentMediaIndex = pagerState.currentPage.coerceIn(0, (mediaItems.size - 1).coerceAtLeast(0))
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val headerSubtitle = when {
-        hasMultipleMedia -> "${mediaItems.size} media cleaned"
-        result.kind == MediaKind.LINK -> result.subtitle
-        else -> mediaItems.firstOrNull()?.sourceName ?: result.sourceName
-    }
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-        containerColor = MaterialTheme.colorScheme.surface,
-        dragHandle = { BottomSheetDefaults.DragHandle() }
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(max = 720.dp)
-                .navigationBarsPadding()
-                .padding(bottom = 16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = result.title,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                    if (headerSubtitle.isNotBlank()) {
-                        Text(
-                            text = headerSubtitle,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
+    val pager = rememberPagerState(pageCount = { mediaItems.size.coerceAtLeast(1) })
+    val current = pager.currentPage.coerceIn(0, (mediaItems.size - 1).coerceAtLeast(0))
+    val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true,
+        confirmValueChange = { !busy || it != SheetValue.Hidden })
+    val maxHeight = with(LocalDensity.current) { (LocalWindowInfo.current.containerSize.height * 0.9f).toDp() }
+    val headerSubtitle = if (result.kind != MediaKind.LINK && mediaItems.size == 1)
+        mediaItems.first().sourceName else result.subtitle
+    val actionShape = RoundedCornerShape(16.dp)
+    val actionModifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+    ModalBottomSheet(onDismissRequest = { if (!busy) onDismiss() }, sheetState = sheet,
+        containerColor = MaterialTheme.colorScheme.surface) {
+        Column(Modifier.fillMaxWidth().heightIn(max = maxHeight).verticalScroll(rememberScrollState())
+            .padding(start = 20.dp, end = 20.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(result.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                    if (headerSubtitle.isNotBlank()) Text(headerSubtitle, style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
-
-                IconButton(onClick = onDismiss) {
-                    Icon(Icons.Outlined.Close, contentDescription = "Close", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                IconButton(onClick = onDismiss, enabled = !busy) { Icon(Icons.Outlined.Close, "Close result") }
+            }
+            if (result.warning != null) {
+                Surface(color = MaterialTheme.colorScheme.errorContainer, shape = MaterialTheme.shapes.medium) {
+                    Text(result.warning, Modifier.padding(12.dp), color = MaterialTheme.colorScheme.onErrorContainer,
+                        style = MaterialTheme.typography.bodySmall)
                 }
             }
-
-            HorizontalDivider(
-                modifier = Modifier.padding(horizontal = 24.dp),
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-            )
-
-            if (hasMultipleMedia) {
-                HorizontalPager(
-                    state = pagerState,
-                    contentPadding = PaddingValues(horizontal = 24.dp),
-                    pageSpacing = 10.dp,
-                    beyondViewportPageCount = 1,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(PreviewHeight)
-                ) { page ->
-                    val pageOffset = (
-                        (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
-                    ).absoluteValue
-                    ResultPreview(
-                        result = result,
-                        mediaItem = mediaItems[page],
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .fillMaxHeight()
-                            .graphicsLayer {
-                                alpha = lerp(0.55f, 1f, 1f - pageOffset.coerceIn(0f, 1f))
-                                scaleY = lerp(0.94f, 1f, 1f - pageOffset.coerceIn(0f, 1f))
-                            }
-                    )
-                }
-
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Row(horizontalArrangement = Arrangement.Center) {
-                        repeat(mediaItems.size) { index ->
-                            val selected = index == currentMediaIndex
-                            Box(
-                                modifier = Modifier
-                                    .padding(horizontal = 3.dp)
-                                    .size(if (selected) 8.dp else 6.dp)
-                                    .clip(CircleShape)
-                                    .background(
-                                        if (selected) {
-                                            MaterialTheme.colorScheme.primary
-                                        } else {
-                                            MaterialTheme.colorScheme.outlineVariant
-                                        }
-                                    )
-                            )
-                        }
+            if (result.kind == MediaKind.LINK) {
+                var showOriginal by rememberSaveable { mutableStateOf(false) }
+                Surface(color = MaterialTheme.colorScheme.surfaceContainer, shape = MaterialTheme.shapes.medium) {
+                    SelectionContainer {
+                        Text(result.cleanedText.orEmpty(), Modifier.padding(12.dp), style = MaterialTheme.typography.bodyMedium)
                     }
-                    Text(
-                        "${currentMediaIndex + 1} of ${mediaItems.size}",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                }
+                if (result.originalText != result.cleanedText) {
+                    TextButton(onClick = { showOriginal = !showOriginal }) { Text(if (showOriginal) "Hide original" else "Compare original") }
+                    if (showOriginal) SelectionContainer { Text(result.originalText.orEmpty(), style = MaterialTheme.typography.bodyMedium) }
+                }
+                if (result.removedDetails.isNotEmpty()) CleanupRows(result.removedDetails)
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Button(onClick = onCopyToClipboard, modifier = actionModifier, shape = actionShape, enabled = !busy) {
+                        ActionLabel(Icons.Outlined.ContentCopy, "Copy to clipboard")
+                    }
+                    if (onShare != null) FilledTonalButton(onClick = onShare, modifier = actionModifier, shape = actionShape, enabled = !busy) {
+                        ActionLabel(Icons.Outlined.Share, "Share links")
+                    }
+                    if (onOpenInBrowser != null) OutlinedButton(onClick = onOpenInBrowser, modifier = actionModifier, shape = actionShape, enabled = !busy) {
+                        ActionLabel(Icons.AutoMirrored.Outlined.OpenInNew,
+                            if (LinkSanitizer.firstLink(result.cleanedText.orEmpty()) == result.cleanedText) "Open link" else "Open first link")
+                    }
                 }
             } else {
-                ResultPreview(
-                    result = result,
-                    mediaItem = mediaItems.firstOrNull(),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp)
-                        .then(
-                            if (result.kind == MediaKind.LINK) Modifier else Modifier.height(PreviewHeight)
-                        )
-                )
-            }
-
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                mediaItems.getOrNull(currentMediaIndex)?.let { mediaItem ->
-                    MediaCleanupSummary(mediaItem)
+                Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceContainer,
+                    modifier = Modifier.fillMaxWidth().height(180.dp)) {
+                    if (mediaItems.size > 1) {
+                        HorizontalPager(state = pager, modifier = Modifier.fillMaxSize()) { index ->
+                            val item = mediaItems[index]
+                            CleanMediaPreview(item.uri, item.kind, item.sourceName, Modifier.fillMaxSize(), active = index == current)
+                        }
+                    } else {
+                        CleanMediaPreview(mediaItems.firstOrNull()?.uri ?: result.primaryUri, result.kind, result.sourceName,
+                            Modifier.fillMaxSize())
+                    }
                 }
-
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Button(
-                        onClick = {
-                            if (result.kind != MediaKind.LINK && onCopyMedia != null) {
-                                onCopyMedia(currentMediaIndex, false)
-                            } else {
-                                onCopyToClipboard()
-                            }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary
-                        )
-                    ) {
-                        Icon(Icons.Outlined.ContentCopy, contentDescription = null, modifier = Modifier.size(20.dp))
-                        Spacer(Modifier.width(10.dp))
-                        Text(
-                            if (result.kind == MediaKind.LINK) "Copy to Clipboard" else "Copy media",
-                            style = MaterialTheme.typography.labelLarge
-                        )
-                    }
-
-                    if (result.kind == MediaKind.LINK) {
-                        if (onOpenInBrowser != null) {
-                            FilledTonalButton(
-                                onClick = onOpenInBrowser,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(52.dp),
-                                shape = RoundedCornerShape(16.dp)
-                            ) {
-                                Icon(Icons.AutoMirrored.Outlined.OpenInNew, contentDescription = null, modifier = Modifier.size(20.dp))
-                                Spacer(Modifier.width(10.dp))
-                                Text("Open in Browser", style = MaterialTheme.typography.labelLarge)
-                            }
-                        }
-                    } else if (onSaveAndCopyMedia != null || onSaveAndCopy != null) {
-                        FilledTonalButton(
-                            onClick = {
-                                if (onSaveAndCopyMedia != null) {
-                                    onSaveAndCopyMedia(currentMediaIndex, false)
-                                } else {
-                                    onSaveAndCopy?.invoke()
-                                }
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(48.dp),
-                            shape = RoundedCornerShape(16.dp)
-                        ) {
-                            Icon(Icons.Outlined.FileDownload, contentDescription = null, modifier = Modifier.size(20.dp))
-                            Spacer(Modifier.width(10.dp))
-                            Text("Save media & copy", style = MaterialTheme.typography.labelLarge)
-                        }
-                    } else if (onSaveToDownloads != null) {
-                        FilledTonalButton(
-                            onClick = onSaveToDownloads,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(52.dp),
-                            shape = RoundedCornerShape(16.dp)
-                        ) {
-                            Icon(Icons.Outlined.FileDownload, contentDescription = null, modifier = Modifier.size(20.dp))
-                            Spacer(Modifier.width(10.dp))
-                            Text("Save to Downloads", style = MaterialTheme.typography.labelLarge)
-                        }
-                    }
-
-                    if (hasMultipleMedia && onSaveAllMedia != null) {
-                        OutlinedButton(
-                            onClick = onSaveAllMedia,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(48.dp),
-                            shape = RoundedCornerShape(16.dp)
-                        ) {
-                            Icon(Icons.Outlined.FileDownload, contentDescription = null, modifier = Modifier.size(20.dp))
-                            Spacer(Modifier.width(10.dp))
-                            Text("Save all (${mediaItems.size}) media", style = MaterialTheme.typography.labelLarge)
-                        }
-                    }
-
-                    if (onShare != null) {
-                        OutlinedButton(
-                            onClick = onShare,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(52.dp),
-                            shape = RoundedCornerShape(16.dp)
-                        ) {
-                            Icon(Icons.Outlined.Share, contentDescription = null, modifier = Modifier.size(20.dp))
-                            Spacer(Modifier.width(10.dp))
-                            Text(
-                                if (result.kind == MediaKind.LINK) "Share Clean Link" else "Share Clean Media",
-                                style = MaterialTheme.typography.labelLarge
-                            )
-                        }
-                    }
-
-                    if (onViewHistory != null && result.historyId != null) {
-                        TextButton(
-                            onClick = { onViewHistory(result.historyId) },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Icon(Icons.AutoMirrored.Outlined.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("View in CleanCopy", style = MaterialTheme.typography.labelMedium)
+                val item = mediaItems.getOrNull(current)
+                if (mediaItems.size > 1) Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(item?.sourceName.orEmpty(), style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text("${current + 1} of ${mediaItems.size}", style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(start = 8.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (item != null) {
+                    Surface(color = MaterialTheme.colorScheme.surfaceContainer, shape = MaterialTheme.shapes.medium) {
+                        Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Cleanup details", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                            CleanupRows(item.cleanedDetails.ifEmpty { listOf("No known metadata found") })
                         }
                     }
                 }
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (onCopyMedia != null) Button(onClick = { onCopyMedia(current, false) },
+                        modifier = actionModifier, shape = actionShape, enabled = !busy) {
+                        ActionLabel(Icons.Outlined.ContentCopy, "Copy to clipboard")
+                    }
+                    if (onSaveMedia != null) FilledTonalButton(onClick = { onSaveMedia(current, mediaItems.size > 1) },
+                        modifier = actionModifier, shape = actionShape, enabled = !busy) {
+                        ActionLabel(Icons.Outlined.FileDownload,
+                            if (busy) "Saving…" else if (mediaItems.size > 1) "Save all to Downloads" else "Save to Downloads")
+                    }
+                    if (onShareMedia != null) {
+                        OutlinedButton(onClick = { onShareMedia(current, false) }, modifier = actionModifier, shape = actionShape, enabled = !busy) {
+                            ActionLabel(Icons.Outlined.Share, "Share clean media")
+                        }
+                        if (mediaItems.size > 1) OutlinedButton(onClick = { onShareMedia(current, true) },
+                            modifier = actionModifier, shape = actionShape, enabled = !busy) {
+                            ActionLabel(Icons.Outlined.Share, "Share all (${mediaItems.size})")
+                        }
+                    }
+                }
+                if (busy) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
         }
     }
 }
 
 @Composable
-private fun MediaCleanupSummary(mediaItem: CleanResultMediaItem) {
-    val alreadyClean = mediaItem.wasAlreadyClean || mediaItem.cleanedDetails.isEmpty()
-    val rows = if (alreadyClean) {
-        listOf("No removable metadata found")
-    } else {
-        mediaItem.cleanedDetails
-    }
-    val canCollapse = rows.size > CollapsedCleanupRows
-    var expanded by remember(mediaItem.uri) { mutableStateOf(false) }
-    val visibleRows = if (!canCollapse || expanded) rows else rows.take(CollapsedCleanupRows)
+private fun ActionLabel(icon: ImageVector, label: String) {
+    Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
+    Spacer(Modifier.width(8.dp))
+    Text(label)
+}
 
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .animateContentSize(),
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)
-    ) {
-        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp)) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .then(
-                        if (canCollapse) {
-                            Modifier.clickable { expanded = !expanded }
-                        } else {
-                            Modifier
-                        }
-                    ),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "What was cleaned",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.weight(1f)
-                )
-                if (canCollapse) {
-                    Icon(
-                        imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
-                        contentDescription = if (expanded) "Show less" else "Show more",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            Column(
-                modifier = Modifier
-                    .padding(top = 8.dp)
-                    .then(
-                        if (expanded && rows.size > 6) {
-                            Modifier
-                                .heightIn(max = 240.dp)
-                                .verticalScroll(rememberScrollState())
-                        } else {
-                            Modifier
-                        }
-                    ),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                visibleRows.forEach { detail ->
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Icon(
-                            imageVector = cleanupIcon(detail, alreadyClean),
-                            contentDescription = null,
-                            tint = if (alreadyClean) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Text(
-                            text = detail,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
+@Composable
+private fun CleanupRows(details: List<String>) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        details.forEach { detail ->
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(cleanupIcon(detail), contentDescription = null, modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.primary)
+                Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f))
             }
         }
     }
 }
 
-private fun cleanupIcon(detail: String, alreadyClean: Boolean): ImageVector {
-    if (alreadyClean) return Icons.Outlined.CheckCircle
+private fun cleanupIcon(detail: String): ImageVector {
     val text = detail.lowercase()
     return when {
-        "location" in text -> Icons.Outlined.LocationOff
-        "camera" in text -> Icons.Outlined.PhotoCamera
+        "could not" in text || "incomplete" in text || "remain" in text -> Icons.Outlined.WarningAmber
+        "no known" in text -> Icons.Outlined.Info
+        text.startsWith("removed ") -> Icons.Outlined.LinkOff
+        "location" in text || "gps" in text -> Icons.Outlined.LocationOff
+        "camera" in text || "lens" in text -> Icons.Outlined.PhotoCamera
         "date" in text || "timestamp" in text -> Icons.Outlined.Schedule
         "label" in text || "creator" in text -> Icons.Outlined.Badge
         "filename" in text -> Icons.Outlined.DriveFileRenameOutline
-        "embedded" in text || "scrubbed" in text -> Icons.Outlined.CleaningServices
+        "heic" in text || "image" in text || "jpeg" in text -> Icons.Outlined.Image
+        "video" in text || "compressed" in text || "converted" in text -> Icons.Outlined.Movie
+        "section" in text || "embedded" in text -> Icons.Outlined.CleaningServices
         else -> Icons.Outlined.Tune
     }
 }
-
-@Composable
-private fun ResultPreview(
-    result: CleanResultData,
-    mediaItem: CleanResultMediaItem?,
-    modifier: Modifier = Modifier
-) {
-    val context = LocalContext.current
-    val kind = mediaItem?.kind ?: result.kind
-    val primaryUri = mediaItem?.uri ?: result.primaryUri
-    val sourceName = mediaItem?.sourceName ?: result.sourceName
-
-    when (kind) {
-        MediaKind.IMAGE -> {
-            val bitmap by produceState<Bitmap?>(initialValue = null, primaryUri) {
-                value = primaryUri?.let { uri ->
-                    withContext(Dispatchers.IO) {
-                        decodeThumb(context, uri)
-                    }
-                }
-            }
-            if (bitmap != null) {
-                Surface(
-                    modifier = modifier,
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant
-                ) {
-                    ComposeImage(
-                        bitmap = bitmap!!.asImageBitmap(),
-                        contentDescription = sourceName.ifBlank { "Cleaned media preview" },
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(6.dp)
-                    )
-                }
-            } else if (sourceName.isNotBlank()) {
-                MediaPlaceholder(
-                    icon = Icons.Outlined.Image,
-                    label = sourceName,
-                    modifier = modifier
-                )
-            }
-        }
-        MediaKind.VIDEO -> {
-            MediaPlaceholder(
-                icon = Icons.Outlined.Movie,
-                label = sourceName.ifBlank { "Cleaned video" },
-                modifier = modifier
-            )
-        }
-        MediaKind.LINK -> {
-            val before = result.originalText ?: result.sourceName
-            val after = result.cleanedText ?: before
-            if (after.isNotBlank()) {
-                Surface(
-                    modifier = modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant
-                ) {
-                    Column(
-                        modifier = Modifier.padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        if (before.isNotBlank()) {
-                            Text("Before", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(
-                                before,
-                                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                                maxLines = 3,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                        }
-                        Text("After", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                        Text(
-                            after,
-                            style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                            maxLines = 3,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun MediaPlaceholder(
-    icon: ImageVector,
-    label: String,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.width(10.dp))
-            Text(
-                label,
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
-}
-
-private fun decodeThumb(context: Context, uri: Uri): Bitmap? = runCatching {
-    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-    context.contentResolver.openInputStream(uri)?.use { input ->
-        BitmapFactory.decodeStream(input, null, bounds)
-    }
-    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return@runCatching null
-
-    var sampleSize = 1
-    while (bounds.outWidth / sampleSize > 600 || bounds.outHeight / sampleSize > 600) {
-        sampleSize *= 2
-    }
-    val options = BitmapFactory.Options().apply {
-        inSampleSize = sampleSize
-        inPreferredConfig = Bitmap.Config.ARGB_8888
-    }
-    context.contentResolver.openInputStream(uri)?.use { input ->
-        BitmapFactory.decodeStream(input, null, options)
-    }
-}.getOrNull()
