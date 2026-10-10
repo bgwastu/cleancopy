@@ -93,8 +93,8 @@ class CleanUiTest {
 
     private fun withClipboard(clip: ClipData, block: () -> Unit) {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         compose.waitUntil(10_000) { compose.activity.hasWindowFocus() }
+        val clipboard = compose.runOnIdle { context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager }
         val previous = compose.runOnIdle { clipboard.primaryClip }
         compose.runOnIdle { clipboard.setPrimaryClip(clip) }
         try { block() } finally {

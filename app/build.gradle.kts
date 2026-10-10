@@ -1,6 +1,6 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
-val releaseVersion = "1.6.0"
+val releaseVersion = "1.6.1"
 val gitVersionName = providers.exec {
     commandLine("git", "describe", "--tags", "--always", "--dirty")
 }.standardOutput.asText.map { output ->

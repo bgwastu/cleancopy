@@ -171,7 +171,9 @@ class MediaPipelineTest {
         val directory = directory()
         try {
             val missing = uri(File(directory, "missing.mp4"))
-            assertFalse(ClipboardHelper.copyMedia(context, listOf(missing)))
+            var copied = true
+            instrumentation.runOnMainSync { copied = ClipboardHelper.copyMedia(context, listOf(missing)) }
+            assertFalse(copied)
         } finally { directory.deleteRecursively() }
     }
 
