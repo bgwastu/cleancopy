@@ -74,6 +74,7 @@ fun CleanCopyApp(
     compressVideo: Boolean,
     selectedHistory: ClipboardHistoryEntry?,
     linkCleaningEnabled: Boolean,
+    expandShortLinks: Boolean,
     quickSettingsPromptDismissed: Boolean,
     onTabSelected: (Int) -> Unit,
     onCleanCurrentClipboard: () -> Unit,
@@ -87,6 +88,7 @@ fun CleanCopyApp(
     onRewriteFilenameChanged: (Boolean) -> Unit,
     onCompressVideoChanged: (Boolean) -> Unit,
     onLinkCleaningEnabledChanged: (Boolean) -> Unit,
+    onExpandShortLinksChanged: (Boolean) -> Unit,
     onAddQuickSettingsTile: () -> Unit,
     onDismissQuickSettingsPrompt: () -> Unit
 ) {
@@ -167,10 +169,12 @@ fun CleanCopyApp(
                 compressVideo = compressVideo,
                 historyEnabled = historyEnabled,
                 linkCleaningEnabled = linkCleaningEnabled,
+                expandShortLinks = expandShortLinks,
                 onRewriteFilenameChanged = onRewriteFilenameChanged,
                 onCompressVideoChanged = onCompressVideoChanged,
                 onHistoryEnabledChanged = onHistoryEnabledChanged,
-                onLinkCleaningEnabledChanged = onLinkCleaningEnabledChanged
+                onLinkCleaningEnabledChanged = onLinkCleaningEnabledChanged,
+                onExpandShortLinksChanged = onExpandShortLinksChanged
             )
         }
     }
@@ -517,10 +521,12 @@ private fun SettingsPage(
     compressVideo: Boolean,
     historyEnabled: Boolean,
     linkCleaningEnabled: Boolean,
+    expandShortLinks: Boolean,
     onRewriteFilenameChanged: (Boolean) -> Unit,
     onCompressVideoChanged: (Boolean) -> Unit,
     onHistoryEnabledChanged: (Boolean) -> Unit,
-    onLinkCleaningEnabledChanged: (Boolean) -> Unit
+    onLinkCleaningEnabledChanged: (Boolean) -> Unit,
+    onExpandShortLinksChanged: (Boolean) -> Unit
 ) {
     Column(
         modifier = modifier
@@ -562,6 +568,15 @@ private fun SettingsPage(
             checked = linkCleaningEnabled,
             onCheckedChange = onLinkCleaningEnabledChanged
         )
+        if (linkCleaningEnabled) {
+            SettingSwitch(
+                icon = Icons.AutoMirrored.Outlined.OpenInNew,
+                title = "Expand short links",
+                supporting = "Contacts known shorteners to reveal the full link. Turn off to keep short links untouched.",
+                checked = expandShortLinks,
+                onCheckedChange = onExpandShortLinksChanged
+            )
+        }
 
         Text("About", style = MaterialTheme.typography.titleLarge)
         Text("CleanCopy ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodyMedium)

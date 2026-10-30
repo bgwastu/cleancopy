@@ -27,7 +27,7 @@ CleanCopy makes clean copies of images, videos, and links before you share them.
 ## What it does
 
 - Removes identifying metadata from images and videos.
-- Cleans tracking parameters and redirect wrappers from links.
+- Cleans tracking parameters and redirect wrappers from links, including Google Maps, Shopee, Tokopedia, YouTube, and shortened links.
 - Lets you review cleaned media before copying it or saving it to Downloads.
 - Adds an optional Quick Settings tile for fast access.
 - Keeps an optional local history of cleaned items.
@@ -51,7 +51,7 @@ Obtainium watches the GitHub Releases page and can notify you when a new APK is 
 3. CleanCopy removes supported metadata and shows the result without changing your clipboard.
 4. Choose **Copy to clipboard**, **Save to Downloads**, or **Share clean media**. For several files, swipe to preview each item or choose **Save all to Downloads**.
 
-Use **Clean current clipboard** when the media is already in your clipboard. Link cleaning is enabled from Settings.
+Use **Clean current clipboard** when the media is already in your clipboard. Link cleaning is enabled from Settings. Short links from Google Maps, Shopee, Tokopedia, and YouTube are expanded through a connection; turn off **Expand short links** in Settings to keep them as-is.
 
 ## Build
 

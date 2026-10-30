@@ -105,7 +105,7 @@ class LinkSanitizerTest {
             shareUrl,
             emptyList(),
             removeReferrals = false,
-            resolver = { LinkCleanResult(shareUrl, canonicalUrl, emptyList(), listOf("Facebook")) }
+            resolver = { LinkCleanResult(shareUrl, canonicalUrl, emptyList(), listOf("Facebook"), expandedFrom = shareUrl) }
         )
 
         assertEquals(canonicalUrl, result.text)

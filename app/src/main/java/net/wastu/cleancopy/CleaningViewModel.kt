@@ -89,26 +89,59 @@ class CleaningViewModel(application: Application) : AndroidViewModel(application
 
     private suspend fun cleanText(input: String) {
         status = "Cleaning links…"
-        val batch = withContext(Dispatchers.IO) {
+        val (cleaningEnabled, batch) = withContext(Dispatchers.IO) {
             require(LinkSanitizer.containsLink(input)) { "Enter an HTTP or HTTPS link to clean" }
-            if (LinkCleanupStore.isEnabled(context)) LinkSanitizer.cleanText(input, LinkRuleStore.providers(context),
-                removeReferrals = true, resolver = NetworkRedirectResolver::resolve)
+            val cleaningEnabled = LinkCleanupStore.isEnabled(context)
+            val expandEnabled = cleaningEnabled && ShortLinkExpansionStore.isEnabled(context)
+            val cleaned = if (cleaningEnabled) LinkSanitizer.cleanText(
+                input,
+                LinkRuleStore.providers(context),
+                removeReferrals = true,
+                resolver = if (expandEnabled) NetworkRedirectResolver::resolve else null
+            )
             else LinkBatchResult(input, emptyList())
+            cleaningEnabled to cleaned
         }
         linkResult = batch
         val removed = batch.links.sumOf { it.removedParameters.size }
         val changed = batch.links.count { it.changed }
+        val expanded = batch.links.count { it.expandedFrom != null }
         val errors = batch.links.mapNotNull { it.error }.distinct()
-        val disabled = !LinkCleanupStore.isEnabled(context)
+        val disabled = !cleaningEnabled
+        val expansionDetails = batch.links.mapNotNull { it.expandedFrom }.distinct().map { original ->
+            val host = runCatching { java.net.URI(original).host }.getOrNull()?.takeIf { it.isNotBlank() } ?: original
+            "Expanded $host"
+        }
+        val removedDetails = expansionDetails +
+            batch.links.flatMap { it.removedParameters }.distinct().map { "Removed $it" }
         result = CleanResultData(
-            title = when { disabled -> "Link cleaning is off"; errors.isNotEmpty() -> "Link partially checked"; changed > 0 -> "Links cleaned"; else -> "Links checked" },
-            subtitle = when { disabled -> "Enable link cleaning in Settings"; changed > 0 -> "$changed ${if (changed == 1) "link" else "links"} updated. $removed parameters removed."; else -> "No known tracking parameters found" },
+            title = when {
+                disabled -> "Link cleaning is off"
+                errors.isNotEmpty() -> "Link partially checked"
+                changed > 0 -> "Links cleaned"
+                else -> "Links checked"
+            },
+            subtitle = when {
+                disabled -> "Enable link cleaning in Settings"
+                errors.isNotEmpty() && changed == 0 ->
+                    "Local cleaning finished; a shortened link could not be expanded."
+                changed > 0 -> buildString {
+                    append("$changed ${if (changed == 1) "link" else "links"} updated.")
+                    if (expanded > 0) {
+                        append(" $expanded short ${if (expanded == 1) "link" else "links"} expanded.")
+                    }
+                    if (removed > 0) {
+                        append(" $removed ${if (removed == 1) "parameter" else "parameters"} removed.")
+                    }
+                }
+                else -> "No known tracking parameters found"
+            },
             kind = MediaKind.LINK,
             cleanedText = batch.text,
             originalText = input,
             sourceName = input.take(60),
             removedCount = removed,
-            removedDetails = batch.links.flatMap { it.removedParameters }.distinct().map { "Removed $it" },
+            removedDetails = removedDetails,
             wasAlreadyClean = changed == 0 && errors.isEmpty() && !disabled,
             warning = errors.joinToString("\n").takeIf { it.isNotBlank() }
         )

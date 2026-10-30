@@ -56,6 +56,9 @@ class MainActivity : ComponentActivity() {
             var linkCleaningEnabled by remember(resumeTick) {
                 mutableStateOf(LinkCleanupStore.isEnabled(this@MainActivity))
             }
+            var expandShortLinks by remember(resumeTick) {
+                mutableStateOf(ShortLinkExpansionStore.isEnabled(this@MainActivity))
+            }
             var history by remember(resumeTick) {
                 mutableStateOf(ClipboardHistoryStore.entries(this@MainActivity))
             }
@@ -84,6 +87,7 @@ class MainActivity : ComponentActivity() {
                     compressVideo = compressVideo,
                     selectedHistory = selectedHistory,
                     linkCleaningEnabled = linkCleaningEnabled,
+                    expandShortLinks = expandShortLinks,
                     quickSettingsPromptDismissed = quickSettingsPromptDismissed,
                     onTabSelected = { selectedTab = it },
                     onCleanCurrentClipboard = { openCleanCurrentClipboard() },
@@ -110,6 +114,10 @@ class MainActivity : ComponentActivity() {
                     onLinkCleaningEnabledChanged = {
                         linkCleaningEnabled = it
                         LinkCleanupStore.setEnabled(this@MainActivity, it)
+                    },
+                    onExpandShortLinksChanged = {
+                        expandShortLinks = it
+                        ShortLinkExpansionStore.setEnabled(this@MainActivity, it)
                     },
                     onAddQuickSettingsTile = { addQuickSettingsTile() },
                     onDismissQuickSettingsPrompt = {
