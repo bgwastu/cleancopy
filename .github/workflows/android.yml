@@ -89,16 +89,11 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-      - name: Get Android signing secrets
-        uses: bitwarden/sm-action@v2
-        with:
-          access_token: ${{ secrets.BWS_ACCESS_TOKEN }}
-          secrets: |
-            0ecc5659-116c-4804-8309-b4a3002bd429 > ANDROID_KEYSTORE_BASE64
-            9c59ffda-bbb6-4ba3-8c35-b4a3002bd595 > ANDROID_KEYSTORE_PASSWORD
-            0a668da3-1c95-452d-b53b-b4a3002d5bae > ANDROID_KEYSTORE_ALIAS
-
       - name: Build signed release APK
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEYSTORE_ALIAS: ${{ secrets.ANDROID_KEYSTORE_ALIAS }}
         run: |
           set -euo pipefail
           keystore="$RUNNER_TEMP/bagas-wastu-android-release.keystore"
