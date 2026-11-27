@@ -205,6 +205,23 @@ class MarketplaceRulesTest {
     }
 
     @Test
+    fun cleansThreadsLinksOnBothDomains() {
+        assertEquals(
+            "https://www.threads.com/@name/post/C8abcdefgh",
+            clean("https://www.threads.com/@name/post/C8abcdefgh?xmt=AQF0abc&slof=1").cleaned
+        )
+        assertEquals(
+            "https://www.threads.net/@name/post/C8abcdefgh/media",
+            clean("https://www.threads.net/@name/post/C8abcdefgh/media?xmt=AQF0abc&utm_source=ig").cleaned
+        )
+        assertEquals("https://www.threads.com/@name", clean("https://www.threads.com/@name?xmt=abc&igshid=x").cleaned)
+        assertEquals(
+            "https://www.threads.com/intent/post?text=hi&url=https%3A%2F%2Fexample.com",
+            clean("https://www.threads.com/intent/post?text=hi&url=https%3A%2F%2Fexample.com&xmt=abc").cleaned
+        )
+    }
+
+    @Test
     fun removesNewMapsShareIdentifier() {
         assertEquals(
             "https://www.google.com/maps/place/Monas/@-6.17,106.82,17z?hl=id",

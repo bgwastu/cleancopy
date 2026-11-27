@@ -27,7 +27,7 @@ CleanCopy makes clean copies of images, videos, and links before you share them.
 ## What it does
 
 - Removes identifying metadata from images and videos.
-- Cleans tracking parameters and redirect wrappers from links, including X (Twitter), TikTok, Instagram, Google Maps, Shopee, Tokopedia, YouTube, and shortened links.
+- Cleans tracking parameters and redirect wrappers from links, including X (Twitter), TikTok, Instagram, Threads, Google Maps, Shopee, Tokopedia, YouTube, and shortened links.
 - Lets you review cleaned media before copying it or saving it to Downloads.
 - Adds an optional Quick Settings tile for fast access.
 - Keeps an optional local history of cleaned items.

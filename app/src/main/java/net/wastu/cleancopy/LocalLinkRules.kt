@@ -135,6 +135,13 @@ internal object LocalLinkRules {
             )
         ),
         LinkRuleProvider(
+            // threads.net now redirects to threads.com; both are still shared.
+            name = "threads",
+            urlPattern = "^https?://(?:www\\.)?threads\\.(?:com|net)(?:[/:?#]|$)",
+            rules = listOf("xmt", "slof", "igsh", "igshid"),
+            resetQueryOnPaths = listOf("^/@[^/]+/post/[^/]+(?:/media)?/?$")
+        ),
+        LinkRuleProvider(
             // Merges into the downloaded ClearURLs "youtube" provider.
             name = "youtube",
             urlPattern = "^https?://(?:[a-z0-9-]+\\.)*?(youtube\\.com|youtu\\.be)",
