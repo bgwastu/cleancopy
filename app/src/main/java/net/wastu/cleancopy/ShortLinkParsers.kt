@@ -134,6 +134,7 @@ internal object ShortLinkParsers {
         if (path == "/lander" || path.startsWith("/lander/")) return true
         if (path == "/error-404.pl" || path.endsWith("/error-404.pl")) return true
         if ((path == "/maps" || path == "/maps/") && uri.rawQuery.isNullOrEmpty()) return true
+        if (uri.host.equals("share.google", ignoreCase = true) && path == "/error") return true
         return false
     }
 

@@ -5,8 +5,8 @@ import java.util.Locale
 import java.util.regex.Pattern
 
 /**
- * Expands known short links. Only hosts in [shortHosts] (plus Facebook share links and
- * youtu.be) are ever contacted. Anything else is returned untouched without network access.
+ * Expands known short links. Only hosts in [shortHosts] (plus Facebook share links,
+ * TikTok /t/, Instagram /share/, Google's share.google hop, and youtu.be) are ever contacted. Anything else is returned untouched without network access.
  */
 object NetworkRedirectResolver {
     internal var http: ShortLinkHttp = HttpShortLinkClient
@@ -29,6 +29,8 @@ object NetworkRedirectResolver {
         Pattern.compile("^tokopedia\\.link$"),
         Pattern.compile("^tokopedia\\.app\\.link$"),
         Pattern.compile("^tkp\\.me$"),
+        Pattern.compile("^tk\\.tokopedia\\.com$"),
+        Pattern.compile("^share\\.google$"),
         Pattern.compile("^maps\\.app\\.goo\\.gl$"),
         Pattern.compile("^goo\\.gl$"),
         Pattern.compile(
@@ -37,6 +39,9 @@ object NetworkRedirectResolver {
         )
     )
     private val facebookHosts = setOf("facebook.com", "www.facebook.com", "m.facebook.com")
+    private val tiktokHosts = setOf("tiktok.com", "www.tiktok.com", "m.tiktok.com")
+    private val instagramHosts = setOf("instagram.com", "www.instagram.com")
+    private val googleShareHop = Regex("^www\\.google\\.[a-z.]+$")
     private val youtubeId = Regex("[A-Za-z0-9_-]{6,64}")
 
     fun resolve(url: String): LinkCleanResult {
@@ -158,7 +163,7 @@ object NetworkRedirectResolver {
             ?: ShortLinkParsers.parseJsLocation(body)
             ?: ShortLinkParsers.parseIntentFallback(body)
             ?: ShortLinkParsers.parseShopeeConfig(body)
-            ?: if (host == "tokopedia.app.link" || host == "tokopedia.link") {
+            ?: if (host == "tokopedia.app.link" || host == "tokopedia.link" || host == "tk.tokopedia.com") {
                 ShortLinkParsers.parseTokopediaUrl(body)
             } else {
                 null
@@ -179,6 +184,11 @@ object NetworkRedirectResolver {
     }
 
     private fun isExpandable(host: String, path: String): Boolean {
+        // Path-scoped short links on hosts that otherwise serve real pages.
+        if (host in tiktokHosts) return path.startsWith("/t/")
+        if (host in instagramHosts) return path.startsWith("/share/")
+        if (googleShareHop.matches(host)) return path == "/share.google"
+        if (host == "share.google" && path == "/error") return false
         if (host == "goo.gl" && !path.startsWith("/maps/")) return false
         return shortHosts.any { it.matcher(host).matches() }
     }

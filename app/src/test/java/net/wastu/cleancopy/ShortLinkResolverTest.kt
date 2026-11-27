@@ -57,6 +57,93 @@ class ShortLinkResolverTest {
     }
 
     @Test
+    fun expandsTikTokWebShortLinksOnly() {
+        use { url ->
+            if (url == "https://www.tiktok.com/t/ZSabc/") {
+                response(301, location = "https://www.tiktok.com/@name/video/123?_t=x&_r=1")
+            } else {
+                response(404)
+            }
+        }
+
+        val result = NetworkRedirectResolver.resolve("https://www.tiktok.com/t/ZSabc/")
+        assertEquals("https://www.tiktok.com/@name/video/123?_t=x&_r=1", result.cleaned)
+        assertEquals("https://www.tiktok.com/t/ZSabc/", result.expandedFrom)
+
+        val page = NetworkRedirectResolver.resolve("https://www.tiktok.com/@name/video/123")
+        assertNull(page.expandedFrom)
+    }
+
+    @Test
+    fun rejectsTikTokShortLinksThatLandOnTheHomepage() {
+        use { response(302, location = "https://www.tiktok.com/?_r=1") }
+
+        val result = NetworkRedirectResolver.resolve("https://vt.tiktok.com/ZSdead/")
+        assertEquals("https://vt.tiktok.com/ZSdead/", result.cleaned)
+        assertNotNull(result.error)
+    }
+
+    @Test
+    fun expandsInstagramShareLinks() {
+        val fake = use { url ->
+            if (url == "https://www.instagram.com/share/reel/BAabc") {
+                response(302, location = "https://www.instagram.com/reel/DAbc/?igsh=xyz")
+            } else {
+                response(404)
+            }
+        }
+
+        val result = NetworkRedirectResolver.resolve("https://www.instagram.com/share/reel/BAabc")
+        assertEquals("https://www.instagram.com/reel/DAbc/?igsh=xyz", result.cleaned)
+        assertEquals(1, fake.requests.size)
+        assertNull(NetworkRedirectResolver.resolve("https://www.instagram.com/reel/DAbc/").expandedFrom)
+    }
+
+    @Test
+    fun expandsGoogleShareLinksThroughTheSearchHop() {
+        use { url ->
+            when (url) {
+                "https://share.google/abc" -> response(302, location = "https://www.google.com/share.google?q=abc")
+                "https://www.google.com/share.google?q=abc" ->
+                    response(302, location = "https://www.google.com/search?q=Monas&kgmid=/m/1&shndl=30")
+                else -> response(404)
+            }
+        }
+
+        val result = NetworkRedirectResolver.resolve("https://share.google/abc")
+        assertEquals("https://www.google.com/search?q=Monas&kgmid=/m/1&shndl=30", result.cleaned)
+    }
+
+    @Test
+    fun rejectsExpiredGoogleShareLinks() {
+        use { url ->
+            when (url) {
+                "https://share.google/dead" -> response(302, location = "https://www.google.com/share.google?q=dead")
+                else -> response(301, location = "https://share.google/error")
+            }
+        }
+
+        val result = NetworkRedirectResolver.resolve("https://share.google/dead")
+        assertEquals("https://share.google/dead", result.cleaned)
+        assertNull(result.expandedFrom)
+        assertNotNull(result.error)
+    }
+
+    @Test
+    fun expandsTokopediaTikTokShopShortLinks() {
+        use { url ->
+            if (url == "https://tk.tokopedia.com/ZSabc/") {
+                response(302, location = "https://www.tokopedia.com/toko/produk?t_id=1&t_st=1")
+            } else {
+                response(404)
+            }
+        }
+
+        val result = NetworkRedirectResolver.resolve("https://tk.tokopedia.com/ZSabc/")
+        assertEquals("https://www.tokopedia.com/toko/produk?t_id=1&t_st=1", result.cleaned)
+    }
+
+    @Test
     fun expandsShopeeConfigLandingPage() {
         use { url ->
             if (url == "https://s.shopee.co.id/abc") {

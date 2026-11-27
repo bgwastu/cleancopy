@@ -58,6 +58,7 @@ object LinkSanitizer {
         "_gl",
         "yclid",
         "twclid",
+        "ttclid",
         "zanpid",
         "_hsenc",
         "_hsmi"

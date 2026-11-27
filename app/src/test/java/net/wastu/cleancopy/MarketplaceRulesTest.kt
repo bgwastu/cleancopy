@@ -147,12 +147,111 @@ class MarketplaceRulesTest {
     }
 
     @Test
+    fun cleansXStatusShareLinks() {
+        listOf(
+            "https://x.com/jack/status/20?s=20&t=AbCdEf&a=RFELiAObBLe_jLlG8Ms",
+            "https://x.com/jack/status/20?s=46&t=x&utm_source=share",
+            "https://twitter.com/jack/status/20?s=19&ref_src=twsrc%5Etfw"
+        ).forEach { url ->
+            assertEquals(url.substringBefore('?'), clean(url).cleaned)
+        }
+        assertEquals("https://x.com/i/web/status/20", clean("https://x.com/i/web/status/20?s=20&si=1").cleaned)
+        assertEquals("https://x.com/jack/status/20/photo/1", clean("https://x.com/jack/status/20/photo/1?s=20").cleaned)
+    }
+
+    @Test
+    fun keepsXSearchQueryWhileRemovingShareParameters() {
+        assertEquals(
+            "https://x.com/search?q=cleancopy&f=live",
+            clean("https://x.com/search?q=cleancopy&src=typed_query&f=live&s=20&t=abc").cleaned
+        )
+        assertEquals("https://x.com/jack", clean("https://x.com/jack?s=21&t=abc&a=xyz").cleaned)
+    }
+
+    @Test
+    fun cleansTikTokVideoAndProfileLinks() {
+        assertEquals(
+            "https://www.tiktok.com/@name/video/7234567890123456789",
+            clean(
+                "https://www.tiktok.com/@name/video/7234567890123456789" +
+                    "?is_from_webapp=1&sender_device=pc&web_id=7123&_t=ZS-8x&_r=1&share_app_id=1233"
+            ).cleaned
+        )
+        assertEquals(
+            "https://www.tiktok.com/@name/photo/7234567890123456789",
+            clean("https://www.tiktok.com/@name/photo/7234567890123456789?_d=secCgYIASAHKAE&u_code=abc").cleaned
+        )
+        assertEquals(
+            "https://www.tiktok.com/@name?lang=en",
+            clean("https://www.tiktok.com/@name?_t=ZS-8x&_r=1&lang=en&is_from_webapp=1&sender_device=mobile").cleaned
+        )
+    }
+
+    @Test
+    fun cleansInstagramPostsButKeepsCarouselIndex() {
+        assertEquals(
+            "https://www.instagram.com/reel/DAbCdEfGhIj/",
+            clean("https://www.instagram.com/reel/DAbCdEfGhIj/?igsh=MWQ1ZGUxMzBkMA==&utm_source=ig_web_copy_link").cleaned
+        )
+        assertEquals(
+            "https://www.instagram.com/p/DAbCdEfGhIj/?img_index=3",
+            clean("https://www.instagram.com/p/DAbCdEfGhIj/?img_index=3&igsh=abc&ig_rid=def").cleaned
+        )
+        assertEquals(
+            "https://www.instagram.com/name/reel/DAbCdEfGhIj/",
+            clean("https://www.instagram.com/name/reel/DAbCdEfGhIj/?hl=en&igsh=abc").cleaned
+        )
+        assertEquals("https://www.instagram.com/name", clean("https://www.instagram.com/name?igsh=abc&utm_source=qr").cleaned)
+    }
+
+    @Test
+    fun removesNewMapsShareIdentifier() {
+        assertEquals(
+            "https://www.google.com/maps/place/Monas/@-6.17,106.82,17z?hl=id",
+            clean("https://www.google.com/maps/place/Monas/@-6.17,106.82,17z?entry=tts&g_ep=EgoyMDI1&skid=7c2a-uuid&hl=id").cleaned
+        )
+    }
+
+    @Test
+    fun cleansGoogleShareSearchResults() {
+        assertEquals(
+            "https://www.google.com/search?q=Monas&kgmid=/m/02k6fd",
+            clean("https://www.google.com/search?q=Monas&kgmid=/m/02k6fd&shndl=30&shem=ssc&source=sh/x/kp/osrp/m5/1&kgs=abc").cleaned
+        )
+    }
+
+    @Test
+    fun removesTokopediaTikTokShopShareParameters() {
+        assertEquals(
+            "https://www.tokopedia.com/toko",
+            clean("https://www.tokopedia.com/toko?t_id=1&t_st=1&t_pp=homepage&t_efo=x&t_ef=y&t_sm=z&t_spt=w").cleaned
+        )
+    }
+
+    @Test
+    fun cleansOtherShopeeRegions() {
+        assertEquals(
+            "https://shopee.com.my/Item-i.1.2",
+            clean("https://shopee.com.my/Item-i.1.2?sp_atk=a&xptdk=b&share_channel_code=6").cleaned
+        )
+        assertEquals("https://shopee.sg/product/1/2", clean("https://shopee.sg/universal-link/product/1/2?smtt=0").cleaned)
+    }
+
+    @Test
+    fun removesTikTokClickIdEverywhere() {
+        assertEquals("https://example.com/landing?id=1", clean("https://example.com/landing?ttclid=E.C.P.abc&id=1").cleaned)
+    }
+
+    @Test
     fun cleaningIsIdempotent() {
         val urls = listOf(
             "https://shopee.co.id/product/1/2?sp_atk=x&utm_source=y",
             "https://www.tokopedia.com/toko/produk?utm_source=salinlink&_branch_match_id=1",
             "https://www.google.com/maps/place/Fuji/@1,2,15z/data=!3m1!4b1?coh=1&entry=tts",
-            "https://www.youtube.com/watch?v=x&si=1&pp=2&t=3"
+            "https://www.youtube.com/watch?v=x&si=1&pp=2&t=3",
+            "https://x.com/jack/status/20?s=20&t=abc&a=xyz",
+            "https://www.tiktok.com/@name/video/1?_t=x&_r=1",
+            "https://www.instagram.com/p/abc/?img_index=2&igsh=x"
         )
 
         urls.forEach { url ->
