@@ -59,6 +59,8 @@ Use **Clean current clipboard** when the media is already in your clipboard. Lin
 ./gradlew lintDebug testDebugUnitTest assembleDebug
 ```
 
+Publish from a `vMAJOR.MINOR.PATCH` tag on `main`. CI checks that the APK's version name matches the tag and uses that version in the published filename.
+
 ## License
 
 [MIT](LICENSE) © Bagas Wastu

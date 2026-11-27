@@ -1,16 +1,13 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
-val releaseVersion = "1.8.1"
-val gitVersionName = providers.exec {
-    commandLine("git", "describe", "--tags", "--always", "--dirty")
-}.standardOutput.asText.map { output ->
-    val description = output.trim()
-    if (description == "v$releaseVersion") {
-        releaseVersion
-    } else {
-        "$releaseVersion-${description.removePrefix("v")}"
-    }
+val releaseTag = if (providers.environmentVariable("GITHUB_REF_TYPE").orNull == "tag") {
+    providers.environmentVariable("GITHUB_REF_NAME")
+} else {
+    providers.exec {
+        commandLine("git", "describe", "--tags", "--abbrev=0", "--match", "v[0-9]*")
+    }.standardOutput.asText
 }
+val gitVersionName = releaseTag.map { it.trim().removePrefix("v") }
 
 val gitVersionCode = providers.exec {
     commandLine("git", "rev-list", "--count", "HEAD")
@@ -55,6 +52,7 @@ android {
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
             resValue("string", "app_name", "CleanCopy Dev")
         }
         release {
